@@ -1,0 +1,98 @@
+# GPU Descheduler Webhook Production Config
+# TLS certs auto-generated via kube-webhook-certgen (no cert-manager)
+
+# ============================================================
+# Namespace
+# ============================================================
+namespace: kube-system
+
+# ============================================================
+# Image Config
+# ============================================================
+image:
+  registry: docker.io
+  repository: louiclille/gpu-descheduler-webhook
+  tag: v0.0.2
+  pullPolicy: Always
+
+# If Harbor requires auth, uncomment and configure:
+# imagePullSecrets:
+#   - name: harbor-credentials
+
+# ============================================================
+# Replicas
+# ============================================================
+replicaCount: 1
+
+# ============================================================
+# Container Args
+# ============================================================
+args:
+  - --tls-dir=/etc/webhook/certs
+  - --port=8443
+  - --metrics-bind-address=:8080
+  - --scheduler-port=9395  # Scheduler metrics port (default 9395, IP auto-discovered)
+  - --sync-interval=60s
+  - --enable-leader-election=true
+  - --v=3  # Log level: 0=Info, 3=Debug, 4=Verbose, 5=Trace
+
+# ============================================================
+# Resource Limits
+# ============================================================
+resources:
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 512Mi
+
+# ============================================================
+# Port Config
+# ============================================================
+webhookPort: 8443       # Webhook HTTPS port (must match --port arg)
+probePort: 8081         # Health check port
+
+# ============================================================
+# Cert-Manager Config (disabled, using certgen approach)
+# ============================================================
+certManager:
+  enabled: false        # Disable cert-manager
+  issuerName: selfsigned-cluster-issuer
+
+# ============================================================
+# Kube-Webhook-Certgen Config (auto-generated TLS)
+# ============================================================
+patch:
+  enabled: true         # Enable certgen auto-generated certs
+  image:
+    registry: "docker.io"
+    repository: "liangjw/kube-webhook-certgen"
+    tag: "v1.1.1"
+    pullPolicy: IfNotPresent
+    pullSecrets: []
+  imageNew:
+    registry: "docker.io"
+    repository: "liangjw/kube-webhook-certgen"
+    tag: "v1.1.1"
+    pullPolicy: IfNotPresent
+    pullSecrets: []
+  priorityClassName: ""
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  runAsUser: 2000
+
+# ============================================================
+# Webhook Admission Policy
+# ============================================================
+webhook:
+  failurePolicy: Ignore      # Ignore (allow Pod creation on error) or Fail (reject on error)
+  reinvocationPolicy: IfNeeded
+
+# ============================================================
+# Other Config
+# ============================================================
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""

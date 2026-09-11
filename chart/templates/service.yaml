@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "gpu-descheduler-webhook.fullname" . }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "gpu-descheduler-webhook.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "gpu-descheduler-webhook.selectorLabels" . | nindent 4 }}
+  ports:
+    - port: 443
+      targetPort: {{ .Values.webhookPort | default 8443 }}
+  type: ClusterIP

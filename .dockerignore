@@ -1,0 +1,107 @@
+# IMPORTANT: Always include Go dependency files (put at the top!)
+!go.mod
+!go.sum
+
+# Git
+.git
+.gitignore
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# Test files
+*_test.go
+tests/
+test-results/
+
+# Output directories
+_output/
+bin/
+dist/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Dependencies (will be copied via go.mod)
+vendor/
+
+# Charts (not needed for image)
+charts/
+
+# Scripts not needed in image
+scripts/
+hack/
+
+# Other components' code (only need webhook-gpu-descheduler)
+cmd/device-plugin/
+cmd/scheduler/
+cmd/vGPUmonitor/
+cmd/vst-metrics-exporter-hami/
+
+# Config files not needed
+deploy/
+examples/
+dashboards/
+imgs/
+benchmarks/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+Jenkinsfile
+
+# Local development
+.env
+.env.local
+*.local
+
+# Temporary files
+tmp/
+temp/
+*.log
+*.tmp
+
+# Large files or unnecessary data
+*.tar.gz
+*.zip
+gpu-crd-placement
+
+# Exclude common large directories that might exist
+node_modules/
+bower_components/
+.venv/
+venv/
+__pycache__/
+*.pyc
+.cache/
+.npm/
+.yarn/
+
+# Exclude possible data directories
+data/
+dataset/
+models/
+checkpoints/
+weights/
+*.bin
+*.onnx
+*.pt
+*.pth
+*.h5
+*.pb
+
+# Exclude any hidden large directories
+*/.git/objects/pack/

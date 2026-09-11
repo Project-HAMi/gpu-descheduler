@@ -1,0 +1,29 @@
+apiVersion: scheduling.hami.placement.com/v1
+kind: HamiPodPlacement
+metadata:
+  name: immediate-migrate-20260708-03dee
+  namespace: yixin
+spec:
+  reqID: "defrag-20260708-03256"
+  podSelector:
+    matchLabels:
+      app: app-2077227898674089984-sh
+  nodeName: k8s-node01
+  gpuDevices:
+    - gpu-0
+  evictPod: "app-2077227898674089984-sh-65694d44bf-z65rf"
+---
+apiVersion: scheduling.hami.placement.com/v1
+kind: HamiPodPlacement
+metadata:
+  name: batch-2-20260708-xf2df
+  namespace: yixin
+spec:
+  reqID: "deploy-20260708-xf345"
+  podSelector:
+    matchLabels:
+      app: app-2077227898674089984-sh
+  nodeName: k8s-node01
+  gpuDevices:
+    - gpu-0
+  # evictPod left empty, takes effect on next deployment only
