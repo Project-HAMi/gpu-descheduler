@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "gpu-descheduler-webhook.fullname" . }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "gpu-descheduler-webhook.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount | default 2 }}
+  selector:
+    matchLabels:
+      {{- include "gpu-descheduler-webhook.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "gpu-descheduler-webhook.selectorLabels" . | nindent 8 }}
+      annotations:
+        {{- with .Values.patch }}
+        {{- toYaml .podAnnotations | default "{}" | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "gpu-descheduler-webhook.fullname" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: webhook
+          {{- if .Values.image }}
+          image: "{{ .Values.image.repository | default "hami/gpu-descheduler-webhook" }}:{{ .Values.image.tag | default "latest" }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy | default "Always" }}
+          {{- else }}
+          image: "hami/gpu-descheduler-webhook:latest"
+          imagePullPolicy: Always
+          {{- end }}
+          {{- if .Values.args }}
+          args: {{- toYaml .Values.args | nindent 12 }}
+          {{- else }}
+          args:
+            - --tls-dir=/etc/webhook/certs
+            - --port=8443
+            - --enable-leader-election=true
+          {{- end }}
+          ports:
+            - containerPort: {{ .Values.webhookPort | default 8443 }}
+          volumeMounts:
+            - name: tls
+              mountPath: /etc/webhook/certs
+              readOnly: true
+            - name: crdplacement
+              mountPath: /etc/crdplacement
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.probePort | default 8081 }}
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: {{ .Values.probePort | default 8081 }}
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            {{- with .Values.resources }}
+            {{- toYaml . | nindent 12 }}
+            {{- else }}
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            {{- end }}
+      {{- if and .Values.patch .Values.patch.priorityClassName }}
+      priorityClassName: {{ .Values.patch.priorityClassName }}
+      {{- end }}
+      {{- with .Values.patch }}
+      {{- with .nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- end }}
+      {{- with .Values.patch }}
+      {{- with .tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- end }}
+      volumes:
+        - name: tls
+          secret:
+            {{- if and .Values.certManager .Values.certManager.enabled }}
+            secretName: gpu-descheduler-webhook-tls
+            {{- else }}
+            secretName: gpu-descheduler-webhook-tls
+            {{- end }}
+        - name: crdplacement
+          hostPath:
+            path: /etc/crdplacement
+            type: DirectoryOrCreate

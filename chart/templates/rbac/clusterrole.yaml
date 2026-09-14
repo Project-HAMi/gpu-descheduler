@@ -1,0 +1,34 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "gpu-descheduler-webhook.fullname" . }}
+rules:
+# CRD read/write/watch
+- apiGroups: ["scheduling.hami.placement.com"]
+  resources: ["hamipodplacements"]
+  verbs: ["get","list","watch","create","update","patch","delete"]
+# CRD Status subresource (critical for status updates)
+- apiGroups: ["scheduling.hami.placement.com"]
+  resources: ["hamipodplacements/status"]
+  verbs: ["get","update","patch"]
+# Pod query and delete
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get","list","watch","delete"]
+# Pod Eviction permission - critical for handleEvictPod
+# Note: Eviction is a subresource of Pod, in the core API group ("") not the policy group
+- apiGroups: [""]
+  resources: ["pods/eviction"]
+  verbs: ["create"]
+# Endpoints query (for auto-discovering Scheduler Pod IP, avoiding Service port mapping issues)
+- apiGroups: [""]
+  resources: ["endpoints"]
+  verbs: ["get","list","watch"]
+# Leader election leases
+- apiGroups: ["coordination.k8s.io"]
+  resources: ["leases"]
+  verbs: ["create","get","list","watch","update","patch"]
+# Events (required by Leader Election)
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create","patch"]

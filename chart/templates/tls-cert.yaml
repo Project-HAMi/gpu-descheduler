@@ -1,0 +1,19 @@
+{{- if and .Values.certManager .Values.certManager.enabled }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "gpu-descheduler-webhook.fullname" . }}-cert
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "gpu-descheduler-webhook.labels" . | nindent 4 }}
+spec:
+  secretName: {{ .Values.certManager.secretName | default "gpu-descheduler-webhook-tls" }}
+  duration: 876000h   # 100-year validity (effectively permanent)
+  renewBefore: 720h # Renew 30 days before expiry
+  dnsNames:
+    - {{ include "gpu-descheduler-webhook.fullname" . }}.{{ .Values.namespace }}.svc
+    - {{ include "gpu-descheduler-webhook.fullname" . }}.{{ .Values.namespace }}.svc.cluster.local
+  issuerRef:
+    name: {{ .Values.certManager.issuerName | default "selfsigned-cluster-issuer" }}
+    kind: ClusterIssuer
+{{- end }}

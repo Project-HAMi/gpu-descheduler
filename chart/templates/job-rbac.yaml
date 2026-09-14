@@ -1,0 +1,139 @@
+{{- if and (not (and .Values.certManager .Values.certManager.enabled)) (and .Values.patch .Values.patch.enabled) }}
+
+---
+# ============================================================
+# 1️⃣ Pre-install RBAC (for create-secret Job)
+# ============================================================
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "gpu-descheduler-webhook.fullname" . }}-create-job
+  namespace: {{ .Values.namespace }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-3"
+    "helm.sh/hook-delete-policy": before-hook-creation
+  labels:
+    {{- include "gpu-descheduler-webhook.labels" . | nindent 4 }}
+    app.kubernetes.io/component: create-job-rbac
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "create", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "gpu-descheduler-webhook.fullname" . }}-create-job
+  namespace: {{ .Values.namespace }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-3"
+    "helm.sh/hook-delete-policy": before-hook-creation
+  labels:
+    {{- include "gpu-descheduler-webhook.labels" . | nindent 4 }}
+    app.kubernetes.io/component: create-job-rbac
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "gpu-descheduler-webhook.fullname" . }}-create-job
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "gpu-descheduler-webhook.fullname" . }}
+    namespace: {{ .Values.namespace }}
+
+---
+# ============================================================
+# 2️⃣ Post-install RBAC (for patch Job)
+# ============================================================
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "gpu-descheduler-webhook.fullname" . }}-patch-job
+  namespace: {{ .Values.namespace }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "-1"
+    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+  labels:
+    {{- include "gpu-descheduler-webhook.labels" . | nindent 4 }}
+    app.kubernetes.io/component: patch-job-rbac
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "gpu-descheduler-webhook.fullname" . }}-patch-job
+  namespace: {{ .Values.namespace }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "-1"
+    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+  labels:
+    {{- include "gpu-descheduler-webhook.labels" . | nindent 4 }}
+    app.kubernetes.io/component: patch-job-rbac
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "gpu-descheduler-webhook.fullname" . }}-patch-job
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "gpu-descheduler-webhook.fullname" . }}
+    namespace: {{ .Values.namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "gpu-descheduler-webhook.fullname" . }}-patch-job
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "-1"
+    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+  labels:
+    {{- include "gpu-descheduler-webhook.labels" . | nindent 4 }}
+    app.kubernetes.io/component: patch-job-rbac
+rules:
+  - apiGroups: ["admissionregistration.k8s.io"]
+    resources: ["mutatingwebhookconfigurations"]
+    verbs: ["get", "list", "watch", "patch", "update"]
+  - apiGroups: ["admissionregistration.k8s.io"]
+    resources: ["validatingwebhookconfigurations"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "gpu-descheduler-webhook.fullname" . }}-patch-job
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "-1"
+    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+  labels:
+    {{- include "gpu-descheduler-webhook.labels" . | nindent 4 }}
+    app.kubernetes.io/component: patch-job-rbac
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "gpu-descheduler-webhook.fullname" . }}-patch-job
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "gpu-descheduler-webhook.fullname" . }}
+    namespace: {{ .Values.namespace }}
+{{- end }}

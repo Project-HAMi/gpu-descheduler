@@ -1,0 +1,53 @@
+{{- if and (not (and .Values.certManager .Values.certManager.enabled)) (and .Values.patch .Values.patch.enabled) }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "gpu-descheduler-webhook.fullname" . }}-patch
+  namespace: {{ .Values.namespace }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+  labels:
+    {{- include "gpu-descheduler-webhook.labels" . | nindent 4 }}
+    app.kubernetes.io/component: admission-webhook
+spec:
+  template:
+    metadata:
+      name: {{ include "gpu-descheduler-webhook.fullname" . }}-patch
+      labels:
+        {{- include "gpu-descheduler-webhook.labels" . | nindent 8 }}
+        app.kubernetes.io/component: admission-webhook
+    spec:
+      serviceAccountName: {{ include "gpu-descheduler-webhook.fullname" . }}
+      restartPolicy: OnFailure
+      activeDeadlineSeconds: 300
+      containers:
+        - name: patch
+          {{- if and .Values.patch .Values.patch.image }}
+          image: "{{ .Values.patch.image.registry | default "docker.io" }}/{{ .Values.patch.image.repository | default "liangjw/kube-webhook-certgen" }}:{{ .Values.patch.image.tag | default "v1.1.1" }}"
+          imagePullPolicy: {{ .Values.patch.image.pullPolicy | default "IfNotPresent" }}
+          {{- else }}
+          image: "liangjw/kube-webhook-certgen:v1.1.1"
+          imagePullPolicy: IfNotPresent
+          {{- end }}
+          args:
+            - patch
+            - --webhook-name={{ include "gpu-descheduler-webhook.fullname" . }}
+            - --namespace={{ .Values.namespace }}
+            - --patch-validating=false
+            - --secret-name=gpu-descheduler-webhook-tls
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          securityContext:
+            runAsUser: {{ .Values.patch.runAsUser | default 2000 }}
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+{{- end }}

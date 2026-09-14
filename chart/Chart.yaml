@@ -1,0 +1,23 @@
+apiVersion: v2
+name: gpu-descheduler-webhook
+description: Independent HAMi vGPU defrag mutating webhook & controller
+version: 0.1.0
+appVersion: v1.0.0
+keywords:
+  - hami
+  - vgpu
+  - defrag
+  - webhook
+  - scheduling
+home: https://github.com/Project-HAMi/HAMi
+sources:
+  - https://github.com/Project-HAMi/HAMi
+# dependencies:
+#   - name: cert-manager
+#     repository: https://charts.jetstack.io
+#     version: v1.13.0
+#     condition: certManager.install
+# Note: If cert-manager is already installed in the cluster, keep this dependency commented
+# To auto-install cert-manager, uncomment above and run: helm dependency build
+maintainers:
+  - name: HAMi Community
