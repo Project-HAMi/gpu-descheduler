@@ -11,7 +11,7 @@ namespace: kube-system
 # ============================================================
 image:
   registry: docker.io
-  repository: louiclille/gpu-descheduler-webhook
+  repository: projecthami/gpu-descheduler-webhook
   tag: v0.0.2
   pullPolicy: Always
 

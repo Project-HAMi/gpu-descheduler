@@ -153,7 +153,7 @@ fi
 BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 # Build image name
-IMAGE_NAME="${REGISTRY}louiclille/gpu-descheduler-webhook:${TAG}"
+IMAGE_NAME="${REGISTRY}projecthami/gpu-descheduler-webhook:${TAG}"
 
 log_info "=========================================="
 log_info "Building GPU Descheduler Webhook Image"
@@ -268,7 +268,7 @@ if [ $? -eq 0 ]; then
     echo "In chart/values.yaml, modify:"
     echo ""
     echo "image:"
-    echo "  repository: louiclille/gpu-descheduler-webhook"
+    echo "  repository: projecthami/gpu-descheduler-webhook"
     echo "  tag: \"${TAG}\""
     echo ""
 else
