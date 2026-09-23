@@ -131,7 +131,7 @@ func (c *Client) GetClusterInfoFromMetrics() (*ClusterInfoResponse, error) {
 	if err != nil {
 		return nil, fmt.Errorf("metrics request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("metrics endpoint returned status %d for %s", resp.StatusCode, metricsURL)
@@ -368,7 +368,7 @@ func (c *Client) doGet(path string, out any) error {
 	if err != nil {
 		return fmt.Errorf("scheduler request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("scheduler returned status %d for %s", resp.StatusCode, reqURL)

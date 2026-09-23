@@ -11,7 +11,6 @@ import (
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -232,47 +231,6 @@ func (m *PodMutator) Handle(ctx context.Context, req admission.Request) admissio
 	return resp
 }
 
-func (m *PodMutator) getMatchingPlacementsFromAPI(ctx context.Context, pod *corev1.Pod) ([]placementv1.HamiPodPlacement, error) {
-	var list placementv1.HamiPodPlacementList
-	if err := m.Client.List(ctx, &list, client.InNamespace(pod.Namespace)); err != nil {
-		return nil, err
-	}
-
-	klog.V(3).InfoS("[API_LIST] Fetching all placements from API",
-		"namespace", pod.Namespace,
-		"totalPlacements", len(list.Items))
-
-	var matched []placementv1.HamiPodPlacement
-	for _, pl := range list.Items {
-		sel, err := metav1.LabelSelectorAsSelector(&pl.Spec.PodSelector)
-		if err != nil {
-			klog.Warningf("invalid label selector for %s/%s: %v", pl.Namespace, pl.Name, err)
-			continue
-		}
-
-		matches := sel.Matches(labels.Set(pod.Labels))
-
-		klog.V(3).InfoS("  [MATCH_CHECK] Checking label match",
-			"placementName", pl.Name,
-			"placementPhase", pl.Status.Phase,
-			"podLabels", pod.Labels,
-			"selectorMatches", matches)
-
-		if matches {
-			matched = append(matched, pl)
-			klog.InfoS("[PLACEMENT_MATCHED] Found matching placement",
-				"namespace", pod.Namespace,
-				"podName", pod.Name,
-				"matchedPlacement", pl.Name,
-				"phase", pl.Status.Phase,
-				"reqID", pl.Spec.ReqID,
-				"targetNode", pl.Spec.NodeName)
-		}
-	}
-
-	return matched, nil
-}
-
 func buildAnnotationPatches(existing map[string]string, toAdd map[string]string) (patches []map[string]interface{}) {
 	if len(existing) == 0 {
 		patches = append(patches, map[string]interface{}{
@@ -389,7 +347,7 @@ func (m *PodMutator) resolveGPUDeviceUUIDsWithKey(nodeName string, deviceSpecs [
 			strings.Join(validationErrors, "\n"),
 			len(validationErrors),
 			len(deviceSpecs))
-		err = fmt.Errorf(errorSummary)
+		err = fmt.Errorf("%s", errorSummary)
 		return
 	}
 
