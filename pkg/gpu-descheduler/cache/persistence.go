@@ -68,7 +68,7 @@ func SaveConsumedReqIDsToFile() error {
 	}
 
 	if err := os.Rename(tmpFile, getPersistenceFilePath()); err != nil {
-		os.Remove(tmpFile)
+		_ = os.Remove(tmpFile)
 		return fmt.Errorf("failed to rename temp file: %w", err)
 	}
 

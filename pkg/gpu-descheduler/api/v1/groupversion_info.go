@@ -18,6 +18,7 @@ var (
 	}
 
 	// SchemeBuilder is used to register types into Scheme
+	//nolint:staticcheck // scheme.Builder is the standard pattern for CRD API group registration
 	SchemeBuilder = &scheme.Builder{GroupVersion: GroupVersion}
 
 	// AddToScheme adds all types of this API group to the specified Scheme

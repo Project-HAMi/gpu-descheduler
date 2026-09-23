@@ -20,7 +20,7 @@ hami_gpu_memory_limit_bytes{node="worker-1",device_uuid="GPU-abc123",device_inde
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/metrics" {
 			w.Header().Set("Content-Type", "text/plain")
-			w.Write([]byte(mockMetrics))
+			_, _ = w.Write([]byte(mockMetrics))
 			return
 		}
 		t.Errorf("unexpected request to %s", r.URL.Path)

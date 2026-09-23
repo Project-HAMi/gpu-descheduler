@@ -326,10 +326,7 @@ func isSpecEqual(a, b *placementv1.HamiPodPlacement) bool {
 			return false
 		}
 	}
-	if !labelSelectorEqual(&a.Spec.PodSelector, &b.Spec.PodSelector) {
-		return false
-	}
-	return true
+	return labelSelectorEqual(&a.Spec.PodSelector, &b.Spec.PodSelector)
 }
 
 // labelSelectorEqual compares whether two LabelSelectors are identical
