@@ -106,10 +106,8 @@ while [[ $# -gt 0 ]]; do
             PLATFORM="$2"
             if [ "$PLATFORM" = "arm64" ]; then
                 PLATFORM="linux/arm64"
-                DOCKERFILE="Dockerfile.arm64"
             elif [ "$PLATFORM" = "amd64" ]; then
                 PLATFORM="linux/amd64"
-                DOCKERFILE="Dockerfile"
             elif [ "$PLATFORM" != "all" ] && [ "$PLATFORM" != "linux/amd64" ] && [ "$PLATFORM" != "linux/arm64" ]; then
                 log_error "Unsupported platform: $PLATFORM"
                 log_error "Supported values: amd64, arm64, all, linux/amd64, linux/arm64"
@@ -188,6 +186,10 @@ fi
 
 cd "${PROJECT_DIR:-${SCRIPT_DIR}}"
 
+# Extract TARGETOS and TARGETARCH from PLATFORM
+TARGETOS=$(echo "${PLATFORM}" | cut -d'/' -f1)
+TARGETARCH=$(echo "${PLATFORM}" | cut -d'/' -f2)
+
 # Build image
 if [ "$USE_BUILDX" = "true" ] || [ "$PLATFORM" = "all" ]; then
     log_info "Using Docker BuildX..."
@@ -226,6 +228,8 @@ else
 
     docker build ${NO_CACHE} \
         --platform ${PLATFORM} \
+        --build-arg TARGETOS=${TARGETOS} \
+        --build-arg TARGETARCH=${TARGETARCH} \
         --build-arg VERSION=${VERSION} \
         --build-arg REVISION=${REVISION} \
         --build-arg BUILD_DATE="${BUILD_DATE}" \

@@ -73,6 +73,8 @@ jobs:
           platforms: linux/amd64
           push: false
           build-args: |
+            TARGETOS=linux
+            TARGETARCH=amd64
             VERSION=${{ steps.meta.outputs.version }}
             REVISION=${{ steps.meta.outputs.revision }}
             BUILD_DATE=${{ steps.meta.outputs.build_date }}
