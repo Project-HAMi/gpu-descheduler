@@ -6,8 +6,8 @@
 # ============================================
 FROM golang:1.26.6-bookworm AS builder
 
-ARG TARGETOS=linux
-ARG TARGETARCH=amd64
+ARG TARGETOS
+ARG TARGETARCH
 
 # 设置 Go 模块代理（国内用户可使用 goproxy.cn）
 ARG GOPROXY=https://goproxy.cn,direct
