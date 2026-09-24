@@ -6,6 +6,9 @@
 # ============================================
 FROM golang:1.26.6-bookworm AS builder
 
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
+
 # 设置 Go 模块代理（国内用户可使用 goproxy.cn）
 ARG GOPROXY=https://goproxy.cn,direct
 ENV GOPROXY=${GOPROXY}
@@ -28,10 +31,10 @@ ARG REVISION=none
 ARG BUILD_DATE=
 
 # 构建二进制文件
-# 启用 CGO 以支持 NVIDIA NVML 等依赖库
-# 先获取 Go 版本信息
+# CGO_ENABLED=1: HAMi/NVML 强依赖 CGO，不可关闭
+# TARGETOS/TARGETARCH 由 buildx 自动注入，每个平台用原生 gcc 编译
 RUN GO_VERSION=$(go version | awk '{print $3}') && \
-    CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build \
+    CGO_ENABLED=1 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
     -ldflags="-s -w \
     -X main.Version=${VERSION} \
     -X main.BuildTime=${BUILD_DATE} \
