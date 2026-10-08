@@ -18,8 +18,7 @@ import (
 	placementv1 "gpu-descheduler/pkg/gpu-descheduler/api/v1"
 	"gpu-descheduler/pkg/gpu-descheduler/cache"
 	clusterstate "gpu-descheduler/pkg/gpu-descheduler/cluster_state"
-
-	nvidiaDevice "github.com/Project-HAMi/HAMi/pkg/device/nvidia"
+	"gpu-descheduler/pkg/gpu-descheduler/uuidkey"
 )
 
 // +kubebuilder:webhook:path=/mutate,mutating=true,failurePolicy=fail,sideEffects=None,groups="",resources=pods,verbs=create,versions=v1,name=gpu-descheduler.k8s.io,admissionReviewVersions=v1
@@ -328,7 +327,7 @@ func (m *PodMutator) resolveGPUDeviceUUIDsWithKey(nodeName string, deviceSpecs [
 		uuids = append(uuids, deviceInfo.ID)
 
 		if annotationKey == "" {
-			annotationKey = buildUseUUIDAnnotationKey(deviceInfo.Type, deviceInfo.DeviceVendor)
+			annotationKey = uuidkey.Build(deviceInfo.Type, deviceInfo.DeviceVendor)
 		}
 
 		klog.V(3).InfoS("Resolved device index to UUID",
@@ -352,47 +351,4 @@ func (m *PodMutator) resolveGPUDeviceUUIDsWithKey(nodeName string, deviceSpecs [
 	}
 
 	return
-}
-
-// buildUseUUIDAnnotationKey builds the correct use-gpuuuid annotation key based on device type and vendor
-// Uses constants defined by each device driver to ensure consistency with scheduler keys
-func buildUseUUIDAnnotationKey(deviceType string, deviceVendor string) (annotationKey string) {
-	deviceTypeUpper := strings.ToUpper(deviceType)
-	deviceVendorUpper := strings.ToUpper(deviceVendor)
-
-	switch {
-	case deviceTypeUpper == strings.ToUpper(nvidiaDevice.NvidiaGPUDevice) ||
-		strings.Contains(deviceTypeUpper, "NVIDIA") ||
-		deviceVendorUpper == "NVIDIA":
-		return nvidiaDevice.GPUUseUUID
-	case strings.Contains(deviceTypeUpper, "AMD") || deviceVendorUpper == "AMD":
-		// HAMi's AMD backend reads amd.com/use-gpu-uuid, not the use-gpuuuid
-		// spelling of the other vendors, so the default branch would be ignored.
-		return "amd.com/use-gpu-uuid"
-	case strings.Contains(deviceTypeUpper, "VASTAI") || deviceVendorUpper == "VASTAI":
-		return "vastaitech.com/use-gpuuuid"
-	case strings.Contains(deviceTypeUpper, "METAX") || deviceVendorUpper == "METAX":
-		return "metax-tech.com/use-gpuuuid"
-	case strings.Contains(deviceTypeUpper, "MTHREADS") || deviceVendorUpper == "MTHREADS":
-		return "mthreads.ai/use-gpuuuid"
-	case strings.Contains(deviceTypeUpper, "CAMBRICON") || deviceVendorUpper == "CAMBRICON":
-		return "cambricon.com/use-gpuuuid"
-	case strings.Contains(deviceTypeUpper, "HYGON") || deviceVendorUpper == "HYGON":
-		return "hygon.com/use-gpuuuid"
-	case strings.Contains(deviceTypeUpper, "ENFLAME") || deviceVendorUpper == "ENFLAME":
-		return "enflame.com/use-gpuuuid"
-	case strings.Contains(deviceTypeUpper, "KUNLUN") || deviceVendorUpper == "KUNLUN":
-		return "baidu.com/use-gpuuuid"
-	case strings.Contains(deviceTypeUpper, "BIREN") || deviceVendorUpper == "BIREN":
-		return "birentech.com/use-gpuuuid"
-	default:
-		if deviceVendor != "" {
-			vendorLower := strings.ToLower(deviceVendor)
-			if strings.Contains(vendorLower, ".") {
-				return fmt.Sprintf("%s/use-gpuuuid", vendorLower)
-			}
-			return fmt.Sprintf("%s.com/use-gpuuuid", vendorLower)
-		}
-		return nvidiaDevice.GPUUseUUID
-	}
 }

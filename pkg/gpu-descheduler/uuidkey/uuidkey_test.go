@@ -1,8 +1,8 @@
-package webhook
+package uuidkey
 
 import "testing"
 
-func TestBuildUseUUIDAnnotationKey(t *testing.T) {
+func TestBuild(t *testing.T) {
 	for _, tc := range []struct {
 		name, deviceType, vendor, want string
 	}{
@@ -17,8 +17,8 @@ func TestBuildUseUUIDAnnotationKey(t *testing.T) {
 		{"unknown vendor falls back to <vendor>.com", "", "acme", "acme.com/use-gpuuuid"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := buildUseUUIDAnnotationKey(tc.deviceType, tc.vendor); got != tc.want {
-				t.Fatalf("buildUseUUIDAnnotationKey(%q, %q) = %q, want %q", tc.deviceType, tc.vendor, got, tc.want)
+			if got := Build(tc.deviceType, tc.vendor); got != tc.want {
+				t.Fatalf("Build(%q, %q) = %q, want %q", tc.deviceType, tc.vendor, got, tc.want)
 			}
 		})
 	}
