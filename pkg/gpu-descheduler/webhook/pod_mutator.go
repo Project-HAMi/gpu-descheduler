@@ -365,6 +365,10 @@ func buildUseUUIDAnnotationKey(deviceType string, deviceVendor string) (annotati
 		strings.Contains(deviceTypeUpper, "NVIDIA") ||
 		deviceVendorUpper == "NVIDIA":
 		return nvidiaDevice.GPUUseUUID
+	case strings.Contains(deviceTypeUpper, "AMD") || deviceVendorUpper == "AMD":
+		// HAMi's AMD backend reads amd.com/use-gpu-uuid, not the use-gpuuuid
+		// spelling of the other vendors, so the default branch would be ignored.
+		return "amd.com/use-gpu-uuid"
 	case strings.Contains(deviceTypeUpper, "VASTAI") || deviceVendorUpper == "VASTAI":
 		return "vastaitech.com/use-gpuuuid"
 	case strings.Contains(deviceTypeUpper, "METAX") || deviceVendorUpper == "METAX":
