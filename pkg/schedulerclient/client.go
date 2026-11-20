@@ -249,6 +249,12 @@ func parseOverviewMetricLine(line string) (string, *DeviceInfoResponse, error) {
 		deviceMemoryLimit = 0
 	}
 
+	deviceCores, err := strconv.ParseInt(labels["device_cores"], 10, 32)
+	if err != nil {
+		klog.V(5).ErrorS(err, "Invalid device cores", "value", labels["device_cores"])
+		deviceCores = 0
+	}
+
 	deviceInfo := &DeviceInfoResponse{
 		ID:           deviceUUID,
 		Index:        uint(deviceIndex),
@@ -256,7 +262,7 @@ func parseOverviewMetricLine(line string) (string, *DeviceInfoResponse, error) {
 		DeviceVendor: inferVendorFromType(deviceType),
 		Count:        1,
 		Devmem:       int32(deviceMemoryLimit),
-		Devcore:      0,
+		Devcore:      int32(deviceCores),
 		Numa:         0,
 		Mode:         "",
 		Health:       true,
