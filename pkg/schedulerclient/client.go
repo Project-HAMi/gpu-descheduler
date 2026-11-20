@@ -27,6 +27,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/prometheus/common/expfmt"
+	"github.com/prometheus/common/model"
 	"k8s.io/klog/v2"
 )
 
@@ -217,14 +219,19 @@ func parseOverviewMetricLine(line string) (string, *DeviceInfoResponse, error) {
 		return "", nil, fmt.Errorf("not an overview metric line")
 	}
 
-	bracketStart := strings.Index(line, "{")
-	bracketEnd := strings.Index(line, "}")
-	if bracketStart == -1 || bracketEnd == -1 || bracketEnd <= bracketStart {
-		return "", nil, fmt.Errorf("invalid metric format: missing braces")
+	parser := expfmt.NewTextParser(model.UTF8Validation)
+	families, err := parser.TextToMetricFamilies(strings.NewReader(line + "\n"))
+	if err != nil {
+		return "", nil, err
 	}
-
-	labelsPart := line[bracketStart+1 : bracketEnd]
-	labels := parseMetricLabels(labelsPart)
+	metrics := families["hami_node_gpu_overview"].GetMetric()
+	if len(metrics) != 1 {
+		return "", nil, fmt.Errorf("expected one overview metric, got %d", len(metrics))
+	}
+	labels := make(map[string]string)
+	for _, label := range metrics[0].GetLabel() {
+		labels[label.GetName()] = label.GetValue()
+	}
 
 	nodeName := labels["node"]
 	deviceUUID := labels["device_uuid"]
@@ -263,24 +270,6 @@ func parseOverviewMetricLine(line string) (string, *DeviceInfoResponse, error) {
 	}
 
 	return nodeName, deviceInfo, nil
-}
-
-// parseMetricLabels splits a comma-separated label string into a map.
-func parseMetricLabels(labelsPart string) map[string]string {
-	labels := make(map[string]string)
-	parts := strings.Split(labelsPart, ",")
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		eqIdx := strings.Index(part, "=")
-		if eqIdx == -1 {
-			continue
-		}
-		key := strings.TrimSpace(part[:eqIdx])
-		value := strings.TrimSpace(part[eqIdx+1:])
-		value = strings.Trim(value, "\"")
-		labels[key] = value
-	}
-	return labels
 }
 
 // inferVendorFromType attempts to determine GPU vendor from device type name.
