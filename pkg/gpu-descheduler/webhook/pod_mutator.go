@@ -21,7 +21,7 @@ import (
 	"gpu-descheduler/pkg/gpu-descheduler/uuidkey"
 )
 
-// +kubebuilder:webhook:path=/mutate,mutating=true,failurePolicy=fail,sideEffects=None,groups="",resources=pods,verbs=create,versions=v1,name=gpu-descheduler.k8s.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/mutate,mutating=true,failurePolicy=fail,sideEffects=NoneOnDryRun,groups="",resources=pods,verbs=create,versions=v1,name=gpu-descheduler.k8s.io,admissionReviewVersions=v1
 
 // PodMutator implements the admission.Handler interface
 type PodMutator struct {
@@ -67,7 +67,12 @@ func (m *PodMutator) Handle(ctx context.Context, req admission.Request) admissio
 		"name", pod.Name,
 		"schedulerName", pod.Spec.SchedulerName)
 
-	cachedPlacement, found := cache.FindPlacementForPod(pod)
+	dryRun := req.DryRun != nil && *req.DryRun
+	findPlacement := cache.FindPlacementForPod
+	if dryRun {
+		findPlacement = cache.PeekPlacementForPod
+	}
+	cachedPlacement, found := findPlacement(pod)
 
 	klog.InfoS("[CACHE_LOOKUP] Cache lookup result (authoritative source)",
 		"namespace", pod.Namespace,
@@ -84,7 +89,7 @@ func (m *PodMutator) Handle(ctx context.Context, req admission.Request) admissio
 	var placement *placementv1.HamiPodPlacement
 	if found && cachedPlacement != nil {
 		placement = cachedPlacement
-		klog.InfoS("[PLACEMENT_FROM_CACHE] Using placement from cache (single-use, already consumed)",
+		klog.InfoS("[PLACEMENT_FROM_CACHE] Using matching placement from cache",
 			"namespace", pod.Namespace,
 			"podName", pod.Name,
 			"placementName", placement.Name,
@@ -121,9 +126,11 @@ func (m *PodMutator) Handle(ctx context.Context, req admission.Request) admissio
 
 	annotations[cache.GetAdmissionAnnotationKey()] = admissionUID
 
-	cache.RecordPendingAdmission(admissionUID, placement, pod.Namespace, pod.Name)
+	if !dryRun {
+		cache.RecordPendingAdmission(admissionUID, placement, pod.Namespace, pod.Name)
+	}
 
-	klog.InfoS("[ADMISSION_UID_INJECTED] Injected admission-UID annotation and recorded mapping",
+	klog.InfoS("[ADMISSION_UID_INJECTED] Added admission UID to patch",
 		"admissionUID", admissionUID,
 		"podNamespace", pod.Namespace,
 		"podName", pod.Name,
