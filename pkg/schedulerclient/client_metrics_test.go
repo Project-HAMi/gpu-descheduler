@@ -78,6 +78,9 @@ hami_gpu_memory_limit_bytes{node="worker-1",device_uuid="GPU-abc123",device_inde
 	if device.DeviceVendor != "nvidia" {
 		t.Errorf("expected vendor nvidia, got %s", device.DeviceVendor)
 	}
+	if device.Devcore != 80 {
+		t.Errorf("expected devcore 80, got %d", device.Devcore)
+	}
 	if device.Devmem != 24576 {
 		t.Errorf("expected devmem 24576, got %d", device.Devmem)
 	}
