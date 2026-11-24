@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"strings"
 	"sync"
 	"time"
@@ -473,6 +474,10 @@ func isRetryableStatusError(err error) bool {
 		return apierrors.IsConflict(err) || apierrors.IsTooManyRequests(err) ||
 			apierrors.IsServiceUnavailable(err) || apierrors.IsInternalError(err) ||
 			apierrors.IsTimeout(err) || apierrors.IsServerTimeout(err)
+	}
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) {
+		return dnsErr.IsTemporary || dnsErr.IsTimeout
 	}
 	return utilnet.IsTimeout(err) || utilnet.IsConnectionReset(err) ||
 		utilnet.IsConnectionRefused(err) || utilnet.IsHTTP2ConnectionLost(err) ||

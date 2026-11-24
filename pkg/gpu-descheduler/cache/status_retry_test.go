@@ -3,6 +3,8 @@ package cache
 import (
 	"errors"
 	"fmt"
+	"net"
+	"net/url"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -16,7 +18,10 @@ import (
 )
 
 func TestObserverRetriesFailedStatusWrite(t *testing.T) {
-	for _, name := range []string{"missing", "pending"} {
+	for name, updateErr := range map[string]error{
+		"missing": apierrors.NewServiceUnavailable("temporary outage"),
+		"pending": &url.Error{Op: "Put", URL: "https://apiserver", Err: &net.DNSError{Name: "apiserver", IsTemporary: true}},
+	} {
 		t.Run(name, func(t *testing.T) {
 			var objects []runtime.Object
 			if name == "pending" {
@@ -33,7 +38,7 @@ func TestObserverRetriesFailedStatusWrite(t *testing.T) {
 				}
 				attempts = append(attempts, message)
 				if len(attempts) == 1 {
-					return fmt.Errorf("update placement: %w", apierrors.NewServiceUnavailable("temporary outage"))
+					return fmt.Errorf("update placement: %w", updateErr)
 				}
 				return nil
 			}
@@ -49,10 +54,11 @@ func TestObserverRetriesFailedStatusWrite(t *testing.T) {
 func TestObserverDropsPermanentStatusErrors(t *testing.T) {
 	resource := schema.GroupResource{Group: "descheduler.hami.io", Resource: "hamipodplacements"}
 	for name, updateErr := range map[string]error{
-		"forbidden": apierrors.NewForbidden(resource, "placement", errors.New("connection reset by peer")),
-		"invalid":   apierrors.NewInvalid(schema.GroupKind{Group: resource.Group, Kind: "HamiPodPlacement"}, "placement", nil),
-		"not found": apierrors.NewNotFound(resource, "placement"),
-		"unknown":   errors.New("unexpected status error"),
+		"forbidden":     apierrors.NewForbidden(resource, "placement", errors.New("connection reset by peer")),
+		"invalid":       apierrors.NewInvalid(schema.GroupKind{Group: resource.Group, Kind: "HamiPodPlacement"}, "placement", nil),
+		"not found":     apierrors.NewNotFound(resource, "placement"),
+		"permanent DNS": &url.Error{Op: "Put", URL: "https://apiserver", Err: &net.DNSError{Name: "apiserver", IsNotFound: true}},
+		"unknown":       errors.New("unexpected status error"),
 	} {
 		t.Run(name, func(t *testing.T) {
 			obs := NewObservationCache(fake.NewSimpleClientset())
