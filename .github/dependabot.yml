@@ -4,11 +4,33 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    commit-message:
+      prefix: build(deps)
+    groups:
+      # k8s.io/api, apimachinery, client-go and controller-runtime must move together.
+      kubernetes:
+        patterns:
+          - k8s.io/*
+          - sigs.k8s.io/*
+      go-dependencies:
+        update-types:
+          - minor
+          - patch
+
   - package-ecosystem: docker
     directory: /
     schedule:
       interval: weekly
+    commit-message:
+      prefix: build(deps)
+
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    commit-message:
+      prefix: build(deps)
+    groups:
+      github-actions:
+        patterns:
+          - '*'
