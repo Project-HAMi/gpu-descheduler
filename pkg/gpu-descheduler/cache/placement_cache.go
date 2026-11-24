@@ -18,14 +18,19 @@ package cache
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	"net"
 	"strings"
 	"sync"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	utilnet "k8s.io/apimachinery/pkg/util/net"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 
@@ -205,11 +210,12 @@ func isTerminalOrMatchedPhase(phase string) bool {
 
 // ObservedPodPlacement records the matched placement-pod relationship
 type ObservedPodPlacement struct {
-	Placement    *placementv1.HamiPodPlacement
-	PodNamespace string
-	PodName      string
-	MatchedAt    time.Time
-	RetryCount   int
+	Placement      *placementv1.HamiPodPlacement
+	PodNamespace   string
+	PodName        string
+	MatchedAt      time.Time
+	RetryCount     int
+	pendingFailure string
 }
 
 // ObservationCache maintains matched placement records waiting for Pod deployment to complete
@@ -262,6 +268,7 @@ func (oc *ObservationCache) Add(placement *placementv1.HamiPodPlacement, podName
 		existing.PodName = podName
 		existing.MatchedAt = now
 		existing.RetryCount = 0
+		existing.pendingFailure = ""
 	} else {
 		oc.observations[key] = &ObservedPodPlacement{
 			Placement:    placement.DeepCopy(),
@@ -446,6 +453,37 @@ func (oc *ObservationCache) Stop() {
 	}
 }
 
+func isRetryableStatusError(err error) bool {
+	var status apierrors.APIStatus
+	if errors.As(err, &status) {
+		return apierrors.IsConflict(err) || apierrors.IsTooManyRequests(err) ||
+			apierrors.IsServiceUnavailable(err) || apierrors.IsInternalError(err) ||
+			apierrors.IsTimeout(err) || apierrors.IsServerTimeout(err)
+	}
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) {
+		return dnsErr.IsTemporary || dnsErr.IsTimeout
+	}
+	return utilnet.IsTimeout(err) || utilnet.IsConnectionReset(err) ||
+		utilnet.IsConnectionRefused(err) || utilnet.IsHTTP2ConnectionLost(err) ||
+		errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || utilnet.IsProbableEOF(err)
+}
+
+// persistFailure retains a finished observation only if its status write can be retried.
+func (oc *ObservationCache) persistFailure(key string, obs *ObservedPodPlacement, update StatusUpdaterFn) {
+	if update != nil {
+		err := update(obs.Placement.Namespace, obs.Placement.Name, "Failed", obs.pendingFailure)
+		if err != nil && !apierrors.IsNotFound(err) {
+			if isRetryableStatusError(err) {
+				klog.ErrorS(err, "Retrying failed placement status on next observation", "key", key)
+				return
+			}
+			klog.ErrorS(err, "Dropping observation after permanent placement status error", "key", key)
+		}
+	}
+	delete(oc.observations, key)
+}
+
 // checkPodStatus checks the running status of Pods in all observation records
 func (oc *ObservationCache) checkPodStatus(maxRetries int, statusUpdater StatusUpdaterFn) {
 	if oc.client == nil {
@@ -457,6 +495,10 @@ func (oc *ObservationCache) checkPodStatus(maxRetries int, statusUpdater StatusU
 	defer oc.mu.Unlock()
 
 	for key, obs := range oc.observations {
+		if obs.pendingFailure != "" {
+			oc.persistFailure(key, obs, statusUpdater)
+			continue
+		}
 		if obs.PodName == "" {
 			klog.V(2).InfoS("ℹ️ [EMPTY_POD_NAME] Observation has empty pod name, will attempt admission-uid based matching",
 				"key", key,
@@ -533,19 +575,8 @@ func (oc *ObservationCache) checkPodStatus(maxRetries int, statusUpdater StatusU
 					"pod", obs.PodNamespace+"/"+obs.PodName,
 					"retryCount", obs.RetryCount)
 
-				if statusUpdater != nil {
-					if err := statusUpdater(
-						obs.Placement.Namespace,
-						obs.Placement.Name,
-						"Failed",
-						fmt.Sprintf("Pod %s/%s not running after %d retries", obs.PodNamespace, obs.PodName, maxRetries),
-					); err != nil {
-						klog.ErrorS(err, "Failed to update placement status to Failed",
-							"key", key)
-					}
-				}
-
-				delete(oc.observations, key)
+				obs.pendingFailure = fmt.Sprintf("Pod %s/%s not running after %d retries", obs.PodNamespace, obs.PodName, maxRetries)
+				oc.persistFailure(key, obs, statusUpdater)
 			}
 			continue
 		}
@@ -642,19 +673,8 @@ func (oc *ObservationCache) checkPodStatus(maxRetries int, statusUpdater StatusU
 				"podPhase", pod.Status.Phase,
 				"retryCount", obs.RetryCount)
 
-			if statusUpdater != nil {
-				if err := statusUpdater(
-					obs.Placement.Namespace,
-					obs.Placement.Name,
-					"Failed",
-					fmt.Sprintf("Pod %s/%s stuck in phase %s after %d checks", obs.PodNamespace, obs.PodName, pod.Status.Phase, maxRetries),
-				); err != nil {
-					klog.ErrorS(err, "Failed to update placement status to Failed",
-						"key", key)
-				}
-			}
-
-			delete(oc.observations, key)
+			obs.pendingFailure = fmt.Sprintf("Pod %s/%s stuck in phase %s after %d checks", obs.PodNamespace, obs.PodName, pod.Status.Phase, maxRetries)
+			oc.persistFailure(key, obs, statusUpdater)
 		}
 	}
 }
