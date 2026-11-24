@@ -4,7 +4,7 @@
 # ============================================
 # Stage 1: build the Go binary
 # ============================================
-FROM golang:1.26.11-bookworm AS builder
+FROM golang:1.27.3-bookworm AS builder
 
 ARG TARGETOS
 ARG TARGETARCH
