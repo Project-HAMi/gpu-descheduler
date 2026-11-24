@@ -20,10 +20,13 @@ rules:
 - apiGroups: [""]
   resources: ["pods/eviction"]
   verbs: ["create"]
-# Endpoints query (for auto-discovering Scheduler Pod IP, avoiding Service port mapping issues)
+# HAMi scheduler discovery: the Service's metrics port, or a ready endpoint as fallback
 - apiGroups: [""]
-  resources: ["endpoints"]
-  verbs: ["get","list","watch"]
+  resources: ["services"]
+  verbs: ["get"]
+- apiGroups: ["discovery.k8s.io"]
+  resources: ["endpointslices"]
+  verbs: ["list"]
 # Leader election leases
 - apiGroups: ["coordination.k8s.io"]
   resources: ["leases"]

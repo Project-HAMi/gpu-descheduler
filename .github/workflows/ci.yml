@@ -77,10 +77,19 @@ jobs:
         with:
           persist-credentials: false
 
+      # Scan with the toolchain the release image is built with, so standard
+      # library advisories in the shipped binary are caught.
+      - name: Read builder Go version from Dockerfile
+        id: go
+        run: |
+          version=$(sed -n 's/^FROM golang:\([0-9.]*\)-.* AS builder$/\1/p' Dockerfile)
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
       - name: Set up Go
         uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
-          go-version-file: go.mod
+          go-version: ${{ steps.go.outputs.version }}
 
       - name: Run govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.10.0 ./...

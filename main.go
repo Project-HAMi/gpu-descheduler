@@ -26,6 +26,7 @@ import (
 	"gpu-descheduler/pkg/gpu-descheduler/cache"
 	"gpu-descheduler/pkg/gpu-descheduler/controller"
 	defragwebhook "gpu-descheduler/pkg/gpu-descheduler/webhook"
+	"gpu-descheduler/pkg/schedulerclient"
 )
 
 const defaultTLSDir = "/etc/webhook/certs"
@@ -45,84 +46,53 @@ const (
 	defaultMetricsPort        = 9395
 )
 
-func discoverSchedulerURL(port int) string {
-	fallbackURL := fmt.Sprintf("http://%s.%s.svc:%d",
-		defaultSchedulerService, defaultSchedulerNamespace, port)
-
+// discoverSchedulerURL finds the HAMi scheduler metrics endpoint.
+func discoverSchedulerURL(namespace, service string, port int) string {
+	var client kubernetes.Interface
 	config, err := rest.InClusterConfig()
-	if err != nil {
-		setupLog.Error(err, "⚠️ Failed to get in-cluster config, using fallback URL",
-			"fallbackURL", fallbackURL,
-			"warning", "DNS-based URL may not work if Service port mapping is broken")
-		return fallbackURL
+	if err == nil {
+		client, err = kubernetes.NewForConfig(config)
 	}
-
-	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		setupLog.Error(err, "⚠️ Failed to create kubernetes client, using fallback URL",
-			"fallbackURL", fallbackURL,
-			"warning", "DNS-based URL may not work if Service port mapping is broken")
-		return fallbackURL
+		setupLog.Error(err, "Cannot build an in-cluster client for scheduler discovery")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-
-	eps, err := clientset.CoreV1().Endpoints(defaultSchedulerNamespace).Get(ctx, defaultSchedulerService, metav1.GetOptions{})
-	if err != nil {
-		setupLog.Error(err, "⚠️ Failed to get scheduler endpoints, using fallback URL",
-			"namespace", defaultSchedulerNamespace,
-			"service", defaultSchedulerService,
-			"fallbackURL", fallbackURL,
-			"warning", "DNS-based URL may not work if Service port mapping is broken")
-		return fallbackURL
-	}
-
-	if len(eps.Subsets) == 0 || len(eps.Subsets[0].Addresses) == 0 {
-		setupLog.Error(nil, "⚠️ No addresses found in scheduler endpoints, using fallback URL",
-			"namespace", defaultSchedulerNamespace,
-			"service", defaultSchedulerService,
-			"fallbackURL", fallbackURL,
-			"warning", "DNS-based URL may not work if Service port mapping is broken")
-		return fallbackURL
-	}
-
-	podIP := eps.Subsets[0].Addresses[0].IP
-	schedulerURL := fmt.Sprintf("http://%s:%d", podIP, port)
-
-	setupLog.Info("✅ Successfully discovered scheduler pod IP from endpoints",
-		"podIP", podIP,
-		"port", port,
-		"schedulerURL", schedulerURL,
-		"endpointCount", len(eps.Subsets[0].Addresses),
-		"note", "Using Pod IP directly to avoid Service port mapping issues")
-
-	return schedulerURL
+	url, source := schedulerclient.DiscoverURL(ctx, client, namespace, service, port)
+	setupLog.Info("Discovered HAMi scheduler metrics endpoint",
+		"schedulerURL", url,
+		"source", source,
+		"service", namespace+"/"+service,
+		"metricsPort", port)
+	return url
 }
 
 func main() {
 	var tlsDir string
 	var port int
 	var metricsAddr string
-	var webhookPort int
 	var schedulerPort int
+	var schedulerNamespace, schedulerService string
 	var syncInterval time.Duration
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
-	flag.IntVar(&webhookPort, "webhook-port", 9443, "The port the webhook server listens on.")
-	flag.IntVar(&schedulerPort, "scheduler-port", defaultMetricsPort, "HAMi scheduler metrics port (default: 9395, auto-discovered from Endpoints)")
+	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "Deprecated: use --metrics-bind-address.")
+	flag.IntVar(&schedulerPort, "scheduler-port", defaultMetricsPort, "HAMi scheduler metrics container port")
+	flag.StringVar(&schedulerNamespace, "scheduler-namespace", defaultSchedulerNamespace, "Namespace of the HAMi scheduler Service")
+	flag.StringVar(&schedulerService, "scheduler-service", defaultSchedulerService, "Name of the HAMi scheduler Service")
 	flag.DurationVar(&syncInterval, "sync-interval", 1*time.Minute, "Interval for syncing cluster state from scheduler")
 	var enableLeaderElection bool
 	flag.StringVar(&tlsDir, "tls-dir", defaultTLSDir, "tls certificate directory")
 	flag.IntVar(&port, "port", 8443, "webhook https listen port")
-	flag.StringVar(&metricsAddr, "metrics-addr", ":8082", "metrics bind address")
+	flag.IntVar(&port, "webhook-port", 8443, "Deprecated: use --port.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", true, "enable leader election for HA")
 	klog.InitFlags(nil)
 	flag.Parse()
 
 	ctrl.SetLogger(klog.NewKlogr())
 
-	schedulerURL := discoverSchedulerURL(schedulerPort)
+	schedulerURL := discoverSchedulerURL(schedulerNamespace, schedulerService, schedulerPort)
 
 	setupLog.Info("====================================",
 		"component", "GPU Descheduler Webhook",
@@ -140,7 +110,7 @@ func main() {
 
 	// Create Manager
 	setupLog.Info("Starting gpu-descheduler webhook server",
-		"webhookPort", webhookPort,
+		"webhookPort", port,
 		"schedulerURL", schedulerURL,
 		"syncInterval", syncInterval)
 
@@ -158,7 +128,7 @@ func main() {
 	setupLog.Info("Started consumed ReqID cleanup task (TTL: 24h, interval: 1h)")
 
 	rediscoverScheduler := func() string {
-		newURL := discoverSchedulerURL(schedulerPort)
+		newURL := discoverSchedulerURL(schedulerNamespace, schedulerService, schedulerPort)
 		setupLog.Info("Rediscovering scheduler URL due to connection failures",
 			"newURL", newURL,
 			"port", schedulerPort)
