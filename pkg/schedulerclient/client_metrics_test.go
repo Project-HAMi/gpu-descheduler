@@ -3,6 +3,7 @@ package schedulerclient
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -206,4 +207,25 @@ func findDevice(devices []DeviceInfoResponse, uuid string) *DeviceInfoResponse {
 		}
 	}
 	return nil
+}
+
+func TestParseMetricsReadsAllocations(t *testing.T) {
+	metrics := `hami_node_gpu_overview{device_cores="100",device_index="0",device_memory_limit="24576",device_type="NVIDIA GeForce RTX 3090",device_uuid="GPU-a",node="n1",zone="vGPU"} 2.097152e+10
+hami_gpu_core_limit_ratio{device_index="0",device_type="NVIDIA GeForce RTX 3090",device_uuid="GPU-a",node="n1",zone="vGPU"} 100
+hami_gpu_core_allocated_ratio{device_index="0",device_type="NVIDIA GeForce RTX 3090",device_uuid="GPU-a",node="n1",zone="vGPU"} 30
+hami_vgpu_memory_allocated_bytes{device_uuid="GPU-a",namespace="default",node="n1",pod="victim",zone="vGPU"} 2.097152e+10
+hami_vgpu_core_allocated_ratio{device_uuid="GPU-a",namespace="default",node="n1",pod="victim",zone="vGPU"} 30
+`
+	resp, err := parseMetricsToClusterInfo(strings.NewReader(metrics))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dev := findDevice(findNode(resp.Nodes, "n1").Devices, "GPU-a")
+	if dev.Devmem != 24576 || dev.Usedmem != 20000 || dev.CoreLimit != 100 || dev.CoreAllocated != 30 {
+		t.Fatalf("device %+v", *dev)
+	}
+	want := PodDeviceAllocation{Namespace: "default", Pod: "victim", DeviceUUID: "GPU-a", Mem: 20000, Cores: 30}
+	if len(resp.PodAllocations) != 1 || resp.PodAllocations[0] != want {
+		t.Fatalf("pod allocations %+v, want %+v", resp.PodAllocations, want)
+	}
 }

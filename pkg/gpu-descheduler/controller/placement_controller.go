@@ -232,6 +232,21 @@ func (r *PlacementReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			"targetPodToEvict", pl.Spec.EvictPod,
 			"currentPhase", pl.Status.Phase)
 
+		// Evicting is irreversible, so refuse it when the target cannot take the Pod.
+		if err := r.checkTargetCapacity(&pl); err != nil {
+			klog.ErrorS(err, "Target cannot take the Pod, not evicting",
+				"namespace", pl.Namespace,
+				"podName", pl.Spec.EvictPod,
+				"placementName", pl.Name)
+
+			pl.Status.Phase = "Failed"
+			pl.Status.Message = fmt.Sprintf("Not evicting pod %s: %v", pl.Spec.EvictPod, err)
+			if updateErr := r.Status().Update(ctx, &pl); updateErr != nil {
+				return ctrl.Result{}, updateErr
+			}
+			return ctrl.Result{}, nil
+		}
+
 		err := r.handleEvictPod(ctx, &pl)
 		if err != nil {
 			klog.ErrorS(err, "❌ [EVICT_POD_FAILED] Failed to evict old Pod",
@@ -346,6 +361,23 @@ func labelSelectorEqual(a, b *metav1.LabelSelector) bool {
 		}
 	}
 	return true
+}
+
+// checkTargetCapacity verifies the placement's target GPUs exist and can hold the
+// Pod that is about to be evicted.
+func (r *PlacementReconciler) checkTargetCapacity(pl *placementv1.HamiPodPlacement) error {
+	if len(pl.Spec.GPUDevices) == 0 {
+		return fmt.Errorf("no GPU devices specified")
+	}
+	indexes := make([]uint, 0, len(pl.Spec.GPUDevices))
+	for _, spec := range pl.Spec.GPUDevices {
+		index, err := parseDeviceSpecFromController(spec)
+		if err != nil {
+			return err
+		}
+		indexes = append(indexes, index)
+	}
+	return r.ClusterState.CheckMoveCapacity(pl.Namespace, pl.Spec.EvictPod, pl.Spec.NodeName, indexes)
 }
 
 // handleEvictPod handles evictPod logic: attempts to evict the specified old Pod
