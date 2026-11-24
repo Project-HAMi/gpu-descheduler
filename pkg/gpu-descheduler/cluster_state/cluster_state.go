@@ -33,6 +33,7 @@ type RediscoverFunc func() string
 type ClusterState struct {
 	mu                         sync.RWMutex
 	nodes                      map[string]*NodeInfo
+	podAllocations             map[string][]PodDeviceAllocation // key: namespace/name
 	lastSyncAt                 time.Time
 	syncErr                    error
 	client                     *schedulerclient.Client
@@ -67,6 +68,18 @@ type DeviceInfo struct {
 	Numa         int
 	Mode         string
 	Health       bool
+	// Usedmem is the device memory HAMi has allocated, in MiB.
+	Usedmem int32
+	// CoreLimit and CoreAllocated share one unit; CoreLimit is zero when unknown.
+	CoreLimit     float64
+	CoreAllocated float64
+}
+
+// PodDeviceAllocation is the GPU share HAMi allocated to a Pod on one device.
+type PodDeviceAllocation struct {
+	DeviceUUID string
+	Mem        int32 // MiB
+	Cores      float64
 }
 
 // NewClusterState creates a cluster state instance, schedulerURL is the HTTP service address of the scheduler
@@ -205,16 +218,19 @@ func (cs *ClusterState) SyncNow() {
 
 		for _, devResp := range nodeResp.Devices {
 			deviceInfo := &DeviceInfo{
-				ID:           devResp.ID,
-				Index:        devResp.Index,
-				Type:         devResp.Type,
-				DeviceVendor: devResp.DeviceVendor,
-				Count:        devResp.Count,
-				Devmem:       devResp.Devmem,
-				Devcore:      devResp.Devcore,
-				Numa:         devResp.Numa,
-				Mode:         devResp.Mode,
-				Health:       devResp.Health,
+				ID:            devResp.ID,
+				Index:         devResp.Index,
+				Type:          devResp.Type,
+				DeviceVendor:  devResp.DeviceVendor,
+				Count:         devResp.Count,
+				Devmem:        devResp.Devmem,
+				Devcore:       devResp.Devcore,
+				Numa:          devResp.Numa,
+				Mode:          devResp.Mode,
+				Health:        devResp.Health,
+				Usedmem:       devResp.Usedmem,
+				CoreLimit:     devResp.CoreLimit,
+				CoreAllocated: devResp.CoreAllocated,
 			}
 
 			devices[devResp.ID] = deviceInfo
@@ -230,8 +246,19 @@ func (cs *ClusterState) SyncNow() {
 		}
 	}
 
+	newPodAllocations := make(map[string][]PodDeviceAllocation)
+	for _, alloc := range resp.PodAllocations {
+		key := alloc.Namespace + "/" + alloc.Pod
+		newPodAllocations[key] = append(newPodAllocations[key], PodDeviceAllocation{
+			DeviceUUID: alloc.DeviceUUID,
+			Mem:        alloc.Mem,
+			Cores:      alloc.Cores,
+		})
+	}
+
 	cs.mu.Lock()
 	cs.nodes = newNodes
+	cs.podAllocations = newPodAllocations
 	cs.lastSyncAt = time.Now()
 	cs.syncErr = nil
 	cs.consecutiveFailures = 0 // Reset failure counter on successful sync
@@ -361,4 +388,53 @@ func (cs *ClusterState) IsReady() bool {
 	cs.mu.RLock()
 	defer cs.mu.RUnlock()
 	return !cs.lastSyncAt.IsZero() && cs.syncErr == nil
+}
+
+// CheckMoveCapacity reports whether each target device on nodeName can take the
+// largest per-device GPU share the Pod holds today, counting the Pod's own share
+// as free because evicting it releases that share. It returns nil when the
+// scheduler reports no allocation for the Pod, since there is nothing to compare.
+// The check uses the last synced metrics, so it cannot rule out a race with
+// Pods scheduled after that sync.
+func (cs *ClusterState) CheckMoveCapacity(namespace, podName, nodeName string, deviceIndexes []uint) error {
+	cs.mu.RLock()
+	defer cs.mu.RUnlock()
+
+	node, ok := cs.nodes[nodeName]
+	if !ok || node == nil {
+		return fmt.Errorf("node %s not found in scheduler metrics", nodeName)
+	}
+
+	allocs := cs.podAllocations[namespace+"/"+podName]
+	var needMem int32
+	var needCores float64
+	ownMem := make(map[string]int32, len(allocs))
+	ownCores := make(map[string]float64, len(allocs))
+	for _, alloc := range allocs {
+		needMem = max(needMem, alloc.Mem)
+		needCores = max(needCores, alloc.Cores)
+		ownMem[alloc.DeviceUUID] += alloc.Mem
+		ownCores[alloc.DeviceUUID] += alloc.Cores
+	}
+
+	for _, index := range deviceIndexes {
+		dev, exists := node.DevicesByIndex[index]
+		if !exists || dev == nil || !dev.Health {
+			return fmt.Errorf("gpu-%d not found or unhealthy on node %s", index, nodeName)
+		}
+		if len(allocs) == 0 {
+			continue
+		}
+		if free := dev.Devmem - dev.Usedmem + ownMem[dev.ID]; free < needMem {
+			return fmt.Errorf("gpu-%d on node %s has %d MiB free, pod %s/%s uses %d MiB",
+				index, nodeName, free, namespace, podName, needMem)
+		}
+		if dev.CoreLimit > 0 {
+			if free := dev.CoreLimit - dev.CoreAllocated + ownCores[dev.ID]; free < needCores {
+				return fmt.Errorf("gpu-%d on node %s has %g cores free, pod %s/%s uses %g",
+					index, nodeName, free, namespace, podName, needCores)
+			}
+		}
+	}
+	return nil
 }

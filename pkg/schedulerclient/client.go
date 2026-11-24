@@ -37,6 +37,19 @@ type ClusterInfoResponse struct {
 	Nodes     []NodeInfoResponse `json:"nodes"`
 	TotalGPUs int                `json:"totalGPUs"`
 	Healthy   bool               `json:"healthy"`
+	// PodAllocations lists what HAMi allocated to each Pod on each device.
+	PodAllocations []PodDeviceAllocation `json:"podAllocations,omitempty"`
+}
+
+// PodDeviceAllocation is the GPU share HAMi allocated to one Pod on one device.
+type PodDeviceAllocation struct {
+	Namespace  string `json:"namespace"`
+	Pod        string `json:"pod"`
+	DeviceUUID string `json:"deviceUUID"`
+	// Mem is the allocated device memory in MiB.
+	Mem int32 `json:"mem"`
+	// Cores is the allocated core share, in the unit of hami_gpu_core_limit_ratio.
+	Cores float64 `json:"cores"`
 }
 
 // NodeInfoResponse mirrors the per-node entry returned by the scheduler.
@@ -61,6 +74,12 @@ type DeviceInfoResponse struct {
 	Mode         string        `json:"mode"`
 	Health       bool          `json:"health"`
 	MIGProfiles  []interface{} `json:"migProfiles,omitempty"`
+	// Usedmem is the device memory HAMi has allocated, in MiB.
+	Usedmem int32 `json:"usedmem,omitempty"`
+	// CoreLimit and CoreAllocated share the unit of the hami_gpu_core_*_ratio metrics.
+	// CoreLimit is zero when the scheduler does not export them.
+	CoreLimit     float64 `json:"coreLimit,omitempty"`
+	CoreAllocated float64 `json:"coreAllocated,omitempty"`
 }
 
 // NodeDeviceMatch mirrors the /find-gpu response payload.
@@ -152,6 +171,18 @@ func parseMetricsToClusterInfo(reader io.Reader) (*ClusterInfoResponse, error) {
 	}
 
 	nodeMap := make(map[string]*NodeInfoResponse)
+	coreLimit := make(map[string]float64)
+	coreAllocated := make(map[string]float64)
+	podAllocations := make(map[string]*PodDeviceAllocation)
+	podAllocation := func(labels map[string]string) *PodDeviceAllocation {
+		key := labels["namespace"] + "/" + labels["pod"] + "/" + labels["device_uuid"]
+		alloc, ok := podAllocations[key]
+		if !ok {
+			alloc = &PodDeviceAllocation{Namespace: labels["namespace"], Pod: labels["pod"], DeviceUUID: labels["device_uuid"]}
+			podAllocations[key] = alloc
+		}
+		return alloc
+	}
 	scanner := bufio.NewScanner(reader)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
@@ -162,6 +193,32 @@ func parseMetricsToClusterInfo(reader io.Reader) (*ClusterInfoResponse, error) {
 		}
 
 		if !strings.HasPrefix(line, "hami_node_gpu_overview{") {
+			if !isUsageMetricLine(line) {
+				continue
+			}
+			name, labels, value, err := parseMetricLine(line)
+			if err != nil {
+				klog.V(5).ErrorS(err, "Failed to parse usage metric line", "line", line)
+				continue
+			}
+			uuid := labels["device_uuid"]
+			if uuid == "" {
+				continue
+			}
+			switch name {
+			case "hami_gpu_core_limit_ratio":
+				coreLimit[uuid] = value
+			case "hami_gpu_core_allocated_ratio":
+				coreAllocated[uuid] = value
+			case "hami_vgpu_memory_allocated_bytes":
+				if labels["pod"] != "" {
+					podAllocation(labels).Mem = bytesToMiB(value)
+				}
+			case "hami_vgpu_core_allocated_ratio":
+				if labels["pod"] != "" {
+					podAllocation(labels).Cores = value
+				}
+			}
 			continue
 		}
 
@@ -201,7 +258,15 @@ func parseMetricsToClusterInfo(reader io.Reader) (*ClusterInfoResponse, error) {
 	}
 
 	for _, nodeResp := range nodeMap {
+		for i := range nodeResp.Devices {
+			dev := &nodeResp.Devices[i]
+			dev.CoreLimit = coreLimit[dev.ID]
+			dev.CoreAllocated = coreAllocated[dev.ID]
+		}
 		response.Nodes = append(response.Nodes, *nodeResp)
+	}
+	for _, alloc := range podAllocations {
+		response.PodAllocations = append(response.PodAllocations, *alloc)
 	}
 
 	klog.V(4).InfoS("Parsed cluster info from metrics",
@@ -219,18 +284,9 @@ func parseOverviewMetricLine(line string) (string, *DeviceInfoResponse, error) {
 		return "", nil, fmt.Errorf("not an overview metric line")
 	}
 
-	parser := expfmt.NewTextParser(model.UTF8Validation)
-	families, err := parser.TextToMetricFamilies(strings.NewReader(line + "\n"))
+	_, labels, value, err := parseMetricLine(line)
 	if err != nil {
 		return "", nil, err
-	}
-	metrics := families["hami_node_gpu_overview"].GetMetric()
-	if len(metrics) != 1 {
-		return "", nil, fmt.Errorf("expected one overview metric, got %d", len(metrics))
-	}
-	labels := make(map[string]string)
-	for _, label := range metrics[0].GetLabel() {
-		labels[label.GetName()] = label.GetValue()
 	}
 
 	nodeName := labels["node"]
@@ -273,9 +329,64 @@ func parseOverviewMetricLine(line string) (string, *DeviceInfoResponse, error) {
 		Numa:         0,
 		Mode:         "",
 		Health:       true,
+		Usedmem:      bytesToMiB(value),
 	}
 
 	return nodeName, deviceInfo, nil
+}
+
+// usageMetricPrefixes are the HAMi scheduler metrics that describe allocated capacity.
+var usageMetricPrefixes = []string{
+	"hami_gpu_core_limit_ratio{",
+	"hami_gpu_core_allocated_ratio{",
+	"hami_vgpu_memory_allocated_bytes{",
+	"hami_vgpu_core_allocated_ratio{",
+}
+
+func isUsageMetricLine(line string) bool {
+	for _, prefix := range usageMetricPrefixes {
+		if strings.HasPrefix(line, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// parseMetricLine parses one Prometheus text sample and returns its name, labels and value.
+func parseMetricLine(line string) (string, map[string]string, float64, error) {
+	parser := expfmt.NewTextParser(model.UTF8Validation)
+	families, err := parser.TextToMetricFamilies(strings.NewReader(line + "\n"))
+	if err != nil {
+		return "", nil, 0, err
+	}
+	if len(families) != 1 {
+		return "", nil, 0, fmt.Errorf("expected one metric family, got %d", len(families))
+	}
+	for name, family := range families {
+		metrics := family.GetMetric()
+		if len(metrics) != 1 {
+			return "", nil, 0, fmt.Errorf("expected one %s metric, got %d", name, len(metrics))
+		}
+		labels := make(map[string]string)
+		for _, label := range metrics[0].GetLabel() {
+			labels[label.GetName()] = label.GetValue()
+		}
+		var value float64
+		switch m := metrics[0]; {
+		case m.GetGauge() != nil:
+			value = m.GetGauge().GetValue()
+		case m.GetCounter() != nil:
+			value = m.GetCounter().GetValue()
+		default:
+			value = m.GetUntyped().GetValue()
+		}
+		return name, labels, value, nil
+	}
+	return "", nil, 0, fmt.Errorf("no metric in line")
+}
+
+func bytesToMiB(bytes float64) int32 {
+	return int32(bytes / (1 << 20))
 }
 
 // inferVendorFromType attempts to determine GPU vendor from device type name.
