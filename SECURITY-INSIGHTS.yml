@@ -29,7 +29,7 @@ project:
     contact:
       name: gpu-descheduler maintainers
       primary: true
-    security-policy: https://github.com/Project-HAMi/gpu-descheduler/blob/main/SECURITY.md
+    policy: https://github.com/Project-HAMi/gpu-descheduler/blob/main/SECURITY.md
     comment: |
       Report vulnerabilities privately through GitHub Security
       Advisories. See SECURITY.md.
@@ -57,9 +57,10 @@ repository:
     assessments:
       self:
         comment: |
-          Dependencies are updated through Dependabot and the Go
-          toolchain is bumped when advisories are published. CI runs
-          build, race tests and golangci-lint on every pull request.
+          Dependabot keeps dependencies current. Every pull request runs
+          tests, lint, govulncheck and CodeQL. main needs green checks
+          and one review. Actions are pinned to commit SHAs. Release
+          images are signed with cosign and ship an SBOM.
     tools:
       - name: Dependabot
         type: SCA
@@ -75,7 +76,7 @@ repository:
           Weekly update pull requests for Go modules, the Dockerfile
           and GitHub Actions.
       - name: GitHub secret scanning
-        type: secret-scanning
+        type: secret
         version: latest
         rulesets:
           - built-in
@@ -87,3 +88,51 @@ repository:
         comment: |
           Native secret scanning with push protection enabled on the
           repository.
+      - name: govulncheck
+        type: SCA
+        version: v1.10.0
+        rulesets:
+          - built-in
+        integration:
+          adhoc: false
+          ci: true
+          release: false
+        results: {}
+        comment: |
+          Runs on every pull request with the Go version of the image.
+      - name: CodeQL
+        type: SAST
+        version: latest
+        rulesets:
+          - default
+        integration:
+          adhoc: false
+          ci: true
+          release: false
+        results: {}
+        comment: |
+          Scans Go code and workflows on every pull request and weekly.
+      - name: OpenSSF Scorecard
+        type: other
+        version: v2.5.0
+        rulesets:
+          - default
+        integration:
+          adhoc: false
+          ci: true
+          release: false
+        results: {}
+        comment: |
+          Runs weekly and on main. Results are on scorecard.dev.
+      - name: cosign
+        type: other
+        version: latest
+        rulesets:
+          - built-in
+        integration:
+          adhoc: false
+          ci: false
+          release: true
+        results: {}
+        comment: |
+          Signs release images. Buildx adds SBOM and provenance.

@@ -6,7 +6,7 @@
 #   ./build-image.sh [options]
 #
 # Options:
-#   -t, --tag <tag>          Image tag (default: v2.5.1)
+#   -t, --tag <tag>          Image tag (default: v0.0.2)
 #   -r, --registry <url>     Image registry URL (optional)
 #   -p, --platform <arch>    Target platform (linux/amd64, linux/arm64, or all)
 #   -v, --version <ver>      Version number (for ldflags)
@@ -16,13 +16,13 @@
 #
 # Examples:
 #   # Build amd64 image locally
-#   ./build-image.sh -t v2.5.1
+#   ./build-image.sh -t dev
 #
-#   # Build and push to GHCR
-#   ./build-image.sh -t v2.5.1 -r ghcr.io/project-hami --push
+#   # Build and push to your registry
+#   ./build-image.sh -t dev -r registry.example.com --push
 #
 #   # Build multi-arch image
-#   ./build-image.sh -t latest -p all -r ghcr.io/project-hami --push
+#   ./build-image.sh -t dev -p all -r registry.example.com --push
 # =====================================================
 
 set -e
@@ -60,11 +60,11 @@ show_help() {
     cat << EOF
 Usage: $0 [options]
 
-Build HAMi Intra-Defrag Webhook Docker image
+Build the HAMi GPU descheduler webhook image
 
 Options:
   -t, --tag <tag>          Image tag (default: ${TAG})
-  -r, --registry <url>     Image registry URL prefix (e.g., ghcr.io/project-hami)
+  -r, --registry <url>     Image registry prefix (e.g., registry.example.com)
   -p, --platform <arch>    Target platform:
                             linux/amd64  (default, x86_64)
                             linux/arm64  (ARM64, e.g., Apple Silicon)
@@ -77,13 +77,13 @@ Options:
 
 Examples:
   # Basic usage - build locally
-  $0 -t v2.5.1
+  $0 -t dev
 
-  # Push to GitHub Container Registry
-  $0 -t v2.5.1 -r ghcr.io/project-hami --push
+  # Push to your registry
+  $0 -t dev -r registry.example.com --push
 
   # Build multi-arch image and push
-  $0 -t latest -p all -r ghcr.io/project-hami --push --use-buildx
+  $0 -t dev -p all -r registry.example.com --push --use-buildx
 
   # Dev mode - no cache
   $0 -t dev --no-cache
