@@ -371,27 +371,12 @@ func (oc *ObservationCache) FindFirstEmptyPodNamePlacement(podNamespace string, 
 
 // labelsMatch checks if Pod labels match LabelSelector
 func labelsMatch(selector metav1.LabelSelector, podLabels map[string]string) bool {
-	if len(selector.MatchLabels) == 0 && len(selector.MatchExpressions) == 0 {
-		return true
+	matcher, err := metav1.LabelSelectorAsSelector(&selector)
+	if err != nil {
+		klog.V(4).ErrorS(err, "Failed to parse LabelSelector")
+		return false
 	}
-
-	for k, v := range selector.MatchLabels {
-		if podLabels[k] != v {
-			return false
-		}
-	}
-
-	if len(selector.MatchExpressions) > 0 {
-		selectorObj, err := metav1.LabelSelectorAsSelector(&selector)
-		if err != nil {
-			klog.V(4).ErrorS(err, "Failed to parse LabelSelector")
-			return false
-		}
-		labelsSet := labels.Set(podLabels)
-		return selectorObj.Matches(labelsSet)
-	}
-
-	return true
+	return matcher.Matches(labels.Set(podLabels))
 }
 
 // ListAll returns all observation records (for debugging)
