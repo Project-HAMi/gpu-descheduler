@@ -78,6 +78,9 @@ hami_gpu_memory_limit_bytes{node="worker-1",device_uuid="GPU-abc123",device_inde
 	if device.DeviceVendor != "nvidia" {
 		t.Errorf("expected vendor nvidia, got %s", device.DeviceVendor)
 	}
+	if device.Devcore != 80 {
+		t.Errorf("expected devcore 80, got %d", device.Devcore)
+	}
 	if device.Devmem != 24576 {
 		t.Errorf("expected devmem 24576, got %d", device.Devmem)
 	}
@@ -110,6 +113,14 @@ func TestParseOverviewMetricLine(t *testing.T) {
 			expectedType:   "T4",
 			expectedIndex:  1,
 			expectedMemory: 16384,
+		},
+		{
+			name:           "quoted delimiters in device type",
+			line:           `hami_node_gpu_overview{device_type="GPU, rev } B",node="node1",device_uuid="GPU-001",device_index="0",device_memory_limit="1024"} 0`,
+			expectedNode:   "node1",
+			expectedUUID:   "GPU-001",
+			expectedType:   "GPU, rev } B",
+			expectedMemory: 1024,
 		},
 		{
 			name:         "invalid format - missing braces",

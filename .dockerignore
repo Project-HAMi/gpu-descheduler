@@ -39,17 +39,11 @@ dist/
 vendor/
 
 # Charts (not needed for image)
-charts/
+chart/
 
 # Scripts not needed in image
 scripts/
 hack/
-
-# Other components' code (only need webhook-gpu-descheduler)
-cmd/device-plugin/
-cmd/scheduler/
-cmd/vGPUmonitor/
-cmd/vst-metrics-exporter-hami/
 
 # Config files not needed
 deploy/

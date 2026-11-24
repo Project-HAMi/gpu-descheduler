@@ -9,9 +9,9 @@ keywords:
   - defrag
   - webhook
   - scheduling
-home: https://github.com/Project-HAMi/HAMi
+home: https://github.com/Project-HAMi/gpu-descheduler
 sources:
-  - https://github.com/Project-HAMi/HAMi
+  - https://github.com/Project-HAMi/gpu-descheduler
 # dependencies:
 #   - name: cert-manager
 #     repository: https://charts.jetstack.io
