@@ -1,0 +1,89 @@
+header:
+  schema-version: 2.0.0
+  last-updated: '2026-11-24'
+  last-reviewed: '2026-11-24'
+  url: https://github.com/Project-HAMi/gpu-descheduler/blob/main/SECURITY-INSIGHTS.yml
+  comment: |
+    Security metadata for gpu-descheduler, following the OpenSSF
+    Security Insights specification.
+
+project:
+  name: gpu-descheduler
+  homepage: https://project-hami.io
+  documentation:
+    code-of-conduct: https://github.com/Project-HAMi/community/blob/main/CODE-OF-CONDUCT.md
+  administrators:
+    - name: Li Mengxuan
+      affiliation: dynamia.ai
+      email: archlitchi@gmail.com
+      primary: true
+  repositories:
+    - name: gpu-descheduler
+      url: https://github.com/Project-HAMi/gpu-descheduler
+      comment: |
+        Mutating webhook and controller that moves HAMi vGPU Pods to
+        chosen nodes and devices to reduce GPU fragmentation.
+  vulnerability-reporting:
+    reports-accepted: true
+    bug-bounty-available: false
+    contact:
+      name: gpu-descheduler maintainers
+      primary: true
+    security-policy: https://github.com/Project-HAMi/gpu-descheduler/blob/main/SECURITY.md
+    comment: |
+      Report vulnerabilities privately through GitHub Security
+      Advisories. See SECURITY.md.
+
+repository:
+  url: https://github.com/Project-HAMi/gpu-descheduler
+  status: active
+  accepts-change-request: true
+  accepts-automated-change-request: true
+  bug-fixes-only: false
+  no-third-party-packages: false
+  core-team:
+    - name: Li Mengxuan
+      affiliation: dynamia.ai
+      email: archlitchi@gmail.com
+      primary: true
+  documentation:
+    contributing-guide: https://github.com/Project-HAMi/gpu-descheduler/blob/main/CONTRIBUTING.md
+    security-policy: https://github.com/Project-HAMi/gpu-descheduler/blob/main/SECURITY.md
+    governance: https://github.com/Project-HAMi/community/blob/main/governance.md
+  license:
+    url: https://github.com/Project-HAMi/gpu-descheduler/blob/main/LICENSE
+    expression: Apache-2.0
+  security:
+    assessments:
+      self:
+        comment: |
+          Dependencies are updated through Dependabot and the Go
+          toolchain is bumped when advisories are published. CI runs
+          build, race tests and golangci-lint on every pull request.
+    tools:
+      - name: Dependabot
+        type: SCA
+        version: latest
+        rulesets:
+          - built-in
+        integration:
+          adhoc: false
+          ci: true
+          release: false
+        results: {}
+        comment: |
+          Weekly update pull requests for Go modules, the Dockerfile
+          and GitHub Actions.
+      - name: GitHub secret scanning
+        type: secret-scanning
+        version: latest
+        rulesets:
+          - built-in
+        integration:
+          adhoc: false
+          ci: true
+          release: false
+        results: {}
+        comment: |
+          Native secret scanning with push protection enabled on the
+          repository.
