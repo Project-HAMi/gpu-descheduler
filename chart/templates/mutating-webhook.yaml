@@ -18,7 +18,7 @@ webhooks:
     reinvocationPolicy: IfNeeded
     failurePolicy: Ignore
     {{- end }}
-    sideEffects: None
+    sideEffects: NoneOnDryRun
     timeoutSeconds: 30
     admissionReviewVersions: ["v1", "v1beta1"]
     clientConfig:

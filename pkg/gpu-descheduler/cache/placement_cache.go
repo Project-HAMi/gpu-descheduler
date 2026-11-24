@@ -1105,101 +1105,44 @@ func GetGlobalCache() *PlacementCache {
 
 // ==================== Convenience Functions for Webhook ====================
 
-// FindPlacementForPod finds matching deployment instructions based on Pod object (enhanced version)
-// This is the main entry function called by Webhook
-//
-// Key features:
-//   - Idempotency guarantee: after successful matching, placement moves from PlacementCache to ObservationCache to prevent reuse
-//   - Status tracking: records the binding relationship between placement and pod for subsequent monitoring
-//   - Auto-cleanup: automatically detects deployment results and updates CRD status via ObservationCache background goroutine
-//
-// Parameters:
-//   - pod: Kubernetes Pod object pointer (must contain Namespace, Name, Labels information)
-//
-// Returns:
-//   - []*placementv1.HamiPodPlacement: list of all matched deployment instructions (sorted by priority)
-//   - bool: whether at least one matching instruction was found
-//
-// Usage example:
-//
-//	pod := &corev1.Pod{
-//	    ObjectMeta: metav1.ObjectMeta{
-//	        Namespace: "yixin",
-//	        Name:      "my-pod-xxx",
-//	        Labels:    map[string]string{"app": "app-2018239454967238656-sh"},
-//	    },
-//	}
-//	placements, found := cache.FindPlacementForPod(pod)
-//	if found {
-//	    for _, pl := range placements {
-//	        // Use pl.Spec.NodeName, pl.Spec.GPUDevices, etc.
-//
-// At this point, the placement has been moved to observation cache and won't match again
-//
-//	    }
-//	}
-func FindPlacementForPod(pod *corev1.Pod) (*placementv1.HamiPodPlacement, bool) {
-	cache := GetGlobalCache()
-	obsCache := GetGlobalObservationCache()
-
-	namespace := pod.Namespace
-	podName := pod.Name
-	podLabels := pod.Labels
-
-	matched := cache.FindMatchingPlacements(namespace, podLabels)
-
-	if len(matched) > 0 {
-		pl := matched[0]
-
-		klog.V(4).InfoS("Checking first placement for ReqID idempotency",
-			"name", pl.Name,
-			"reqID", pl.Spec.ReqID)
-
-		if IsReqIDConsumed(pl.Spec.ReqID) {
-			existingInfo, _ := GetReqIDConsumptionInfo(pl.Spec.ReqID)
-			klog.V(2).InfoS("First placement already consumed (idempotency enforcement)",
-				"name", pl.Name,
-				"reqID", pl.Spec.ReqID,
-				"consumedBy", existingInfo.PodNamespace+"/"+existingInfo.PodName,
-				"consumedAt", existingInfo.ConsumedAt,
-				"currentPhase", existingInfo.Phase)
-			return nil, false
-		}
-
-		klog.InfoS("[PLACEMENT_CONSUMED] Found and consuming placement (single-use guarantee)",
-			"placement", pl.Namespace+"/"+pl.Name,
-			"pod", namespace+"/"+podName,
-			"reqID", pl.Spec.ReqID,
-			"nodeName", pl.Spec.NodeName,
-			"gpuDevices", pl.Spec.GPUDevices,
-			"action", "Removing from active cache to prevent reuse")
-
-		klog.V(3).InfoS("Moving placement from active cache to observation cache (ensuring idempotency)",
-			"placement", pl.Namespace+"/"+pl.Name,
-			"pod", namespace+"/"+podName,
-			"reqID", pl.Spec.ReqID)
-
-		cache.Delete(pl.Namespace, pl.Name)
-		obsCache.Add(pl, namespace, podName)
-
-		MarkReqIDConsumed(
-			pl.Spec.ReqID,
-			pl.Namespace,
-			pl.Name,
-			namespace,
-			podName,
-			"Observing",
-		)
-
-		return pl, true
+// PeekPlacementForPod returns the first eligible placement without consuming it.
+func PeekPlacementForPod(pod *corev1.Pod) (*placementv1.HamiPodPlacement, bool) {
+	matched := GetGlobalCache().FindMatchingPlacements(pod.Namespace, pod.Labels)
+	if len(matched) == 0 {
+		klog.V(4).InfoS("No matching placement found for pod", "namespace", pod.Namespace, "podName", pod.Name, "podLabels", pod.Labels)
+		return nil, false
 	}
+	pl := matched[0]
+	klog.V(4).InfoS("Checking first placement for ReqID idempotency", "name", pl.Name, "reqID", pl.Spec.ReqID)
+	if info, consumed := GetReqIDConsumptionInfo(pl.Spec.ReqID); consumed {
+		klog.V(2).InfoS("First placement already consumed (idempotency enforcement)",
+			"name", pl.Name, "reqID", pl.Spec.ReqID, "consumedBy", info.PodNamespace+"/"+info.PodName,
+			"consumedAt", info.ConsumedAt, "currentPhase", info.Phase)
+		return nil, false
+	}
+	return pl, true
+}
 
-	klog.V(4).InfoS("No matching placement found for pod",
-		"namespace", namespace,
-		"podName", podName,
-		"podLabels", podLabels)
-
-	return nil, false
+// FindPlacementForPod is the webhook entry point for consuming a placement.
+// It returns the first matching placement and true if its ReqID is
+// available. A successful match moves the placement from the active cache to
+// the observation cache for Pod status tracking and marks the ReqID consumed
+// to prevent reuse. Dry-run requests use PeekPlacementForPod instead.
+func FindPlacementForPod(pod *corev1.Pod) (*placementv1.HamiPodPlacement, bool) {
+	pl, found := PeekPlacementForPod(pod)
+	if !found {
+		return nil, false
+	}
+	klog.InfoS("[PLACEMENT_CONSUMED] Found and consuming placement (single-use guarantee)",
+		"placement", pl.Namespace+"/"+pl.Name, "pod", pod.Namespace+"/"+pod.Name,
+		"reqID", pl.Spec.ReqID, "nodeName", pl.Spec.NodeName, "gpuDevices", pl.Spec.GPUDevices,
+		"action", "Removing from active cache to prevent reuse")
+	klog.V(3).InfoS("Moving placement from active cache to observation cache (ensuring idempotency)",
+		"placement", pl.Namespace+"/"+pl.Name, "pod", pod.Namespace+"/"+pod.Name, "reqID", pl.Spec.ReqID)
+	GetGlobalCache().Delete(pl.Namespace, pl.Name)
+	GetGlobalObservationCache().Add(pl, pod.Namespace, pod.Name)
+	MarkReqIDConsumed(pl.Spec.ReqID, pl.Namespace, pl.Name, pod.Namespace, pod.Name, "Observing")
+	return pl, true
 }
 
 // FindFirstPlacementForPod finds the first matching deployment instruction (shortcut method)
