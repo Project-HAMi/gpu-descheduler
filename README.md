@@ -4,11 +4,9 @@
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Project-HAMi/gpu-descheduler/badge)](https://scorecard.dev/viewer/?uri=github.com/Project-HAMi/gpu-descheduler)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-[中文](README_CN.md)
+English | [中文](README_CN.md)
 
 The descheduler moves GPU Pods on [HAMi](https://github.com/Project-HAMi/HAMi) clusters. You tell it where a Pod should go with a `HamiPodPlacement`. It can evict the old Pod, and it pins the next matching Pod to the GPUs you chose.
-
-It does not pick Pods to move by itself yet. See [#36](https://github.com/Project-HAMi/gpu-descheduler/issues/36).
 
 ## Requirements
 

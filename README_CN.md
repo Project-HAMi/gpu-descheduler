@@ -4,11 +4,9 @@
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Project-HAMi/gpu-descheduler/badge)](https://scorecard.dev/viewer/?uri=github.com/Project-HAMi/gpu-descheduler)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-[English](README.md)
+[English](README.md) | 中文
 
 descheduler 用来在 [HAMi](https://github.com/Project-HAMi/HAMi) 集群里迁移 GPU Pod。你用 `HamiPodPlacement` 指定 Pod 去哪里。它可以驱逐旧 Pod，并把下一个匹配的 Pod 固定到你选的 GPU 上。
-
-它目前不会自己挑选要迁移的 Pod。见 [#36](https://github.com/Project-HAMi/gpu-descheduler/issues/36)。
 
 ## 环境要求
 
