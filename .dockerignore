@@ -18,7 +18,7 @@ Thumbs.db
 
 # Documentation
 *.md
-!readme.md
+!README.md
 docs/
 
 # Test files

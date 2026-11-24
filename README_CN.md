@@ -22,7 +22,7 @@
 
 ## 文档
 
-- 📘 [English](readme.md)
+- 📘 [English](README.md)
 
 ## 构建镜像
 
