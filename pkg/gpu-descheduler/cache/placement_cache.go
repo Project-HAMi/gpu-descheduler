@@ -18,7 +18,9 @@ package cache
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"sync"
 	"time"
@@ -27,6 +29,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	utilnet "k8s.io/apimachinery/pkg/util/net"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 
@@ -464,13 +467,28 @@ func (oc *ObservationCache) Stop() {
 	}
 }
 
-// persistFailure removes a finished observation once its status is saved or the placement is gone.
+func isRetryableStatusError(err error) bool {
+	var status apierrors.APIStatus
+	if errors.As(err, &status) {
+		return apierrors.IsConflict(err) || apierrors.IsTooManyRequests(err) ||
+			apierrors.IsServiceUnavailable(err) || apierrors.IsInternalError(err) ||
+			apierrors.IsTimeout(err) || apierrors.IsServerTimeout(err)
+	}
+	return utilnet.IsTimeout(err) || utilnet.IsConnectionReset(err) ||
+		utilnet.IsConnectionRefused(err) || utilnet.IsHTTP2ConnectionLost(err) ||
+		errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || utilnet.IsProbableEOF(err)
+}
+
+// persistFailure retains a finished observation only if its status write can be retried.
 func (oc *ObservationCache) persistFailure(key string, obs *ObservedPodPlacement, update StatusUpdaterFn) {
 	if update != nil {
 		err := update(obs.Placement.Namespace, obs.Placement.Name, "Failed", obs.pendingFailure)
 		if err != nil && !apierrors.IsNotFound(err) {
-			klog.ErrorS(err, "Retrying failed placement status on next observation", "key", key)
-			return
+			if isRetryableStatusError(err) {
+				klog.ErrorS(err, "Retrying failed placement status on next observation", "key", key)
+				return
+			}
+			klog.ErrorS(err, "Dropping observation after permanent placement status error", "key", key)
 		}
 	}
 	delete(oc.observations, key)
