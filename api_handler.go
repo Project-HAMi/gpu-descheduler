@@ -8,6 +8,7 @@ import (
 	placementv1 "gpu-descheduler/pkg/gpu-descheduler/api/v1"
 	"gpu-descheduler/pkg/gpu-descheduler/cache"
 	clusterstate "gpu-descheduler/pkg/gpu-descheduler/cluster_state"
+	"gpu-descheduler/pkg/gpu-descheduler/defrag"
 
 	"k8s.io/klog/v2"
 )
@@ -211,4 +212,39 @@ func buildPlacementCacheResponse(placements []*placementv1.HamiPodPlacement) Pla
 	}
 
 	return resp
+}
+
+// RegisterDefragAPIHandlers serves the latest defrag report and a manual
+// trigger. Only the leader plans, so other replicas answer 503.
+func RegisterDefragAPIHandlers(mux *http.ServeMux, runner *defrag.Runner) {
+	mux.HandleFunc("/api/v1/defrag/plans", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		report := runner.Report()
+		if report == nil {
+			http.Error(w, "no defrag report yet: this replica is not the leader, or the first run has not finished", http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(report); err != nil {
+			klog.ErrorS(err, "Failed to encode the defrag report")
+		}
+	})
+	mux.HandleFunc("/api/v1/defrag/run", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		switch runner.Trigger() {
+		case defrag.TriggerNotLeader:
+			http.Error(w, "this replica is not the leader", http.StatusServiceUnavailable)
+		case defrag.TriggerBusy:
+			http.Error(w, "a defrag plan is being carried out", http.StatusConflict)
+		default:
+			w.WriteHeader(http.StatusAccepted)
+		}
+	})
+	klog.Info("Registered HTTP endpoints: GET /api/v1/defrag/plans, POST /api/v1/defrag/run")
 }

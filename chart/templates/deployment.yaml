@@ -41,14 +41,32 @@ spec:
         - name: webhook
           image: {{ include "gpu-descheduler-webhook.image" . | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
-          {{- if .Values.args }}
-          args: {{- toYaml .Values.args | nindent 12 }}
-          {{- else }}
           args:
+            {{- if .Values.args }}
+            {{- toYaml .Values.args | nindent 12 }}
+            {{- else }}
             - --tls-dir=/etc/webhook/certs
             - --port=8443
             - --enable-leader-election=true
-          {{- end }}
+            {{- end }}
+            {{- with .Values.defrag }}
+            {{- if .enabled }}
+            - --defrag-enabled=true
+            - --defrag-mode={{ .mode }}
+            - --defrag-scope={{ .scope }}
+            - --defrag-interval={{ .interval }}
+            - --defrag-max-moves={{ .maxMoves }}
+            - --defrag-max-plans={{ .maxPlans }}
+            - --defrag-alternatives={{ .alternatives }}
+            - --defrag-min-pending-age={{ .minPendingAge }}
+            - --defrag-cooldown={{ .cooldown }}
+            - --defrag-move-timeout={{ .moveTimeout }}
+            - --defrag-namespaces={{ .namespaces }}
+            - --defrag-default-memory={{ .defaultMemory }}
+            - --defrag-default-cores={{ .defaultCores }}
+            - --defrag-memory-factor={{ .memoryFactor }}
+            {{- end }}
+            {{- end }}
           ports:
             - containerPort: {{ .Values.webhookPort | default 8443 }}
           volumeMounts:

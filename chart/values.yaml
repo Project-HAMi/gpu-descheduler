@@ -38,6 +38,30 @@ args:
   - --v=3  # Log level: 0=Info, 3=Debug, 4=Verbose, 5=Trace
 
 # ============================================================
+# Automatic GPU Defragmentation
+# ============================================================
+# Plans the fewest moves of opted-in pods (label hami.io/defrag-opt-in: "true")
+# that let an unschedulable HAMi pod fit on one GPU. Plans are served at
+# /api/v1/defrag/plans on port 8083.
+defrag:
+  enabled: false
+  mode: dryRun            # dryRun only reports plans; execute also moves pods
+  scope: sameNode         # sameNode or crossNode
+  interval: 5m
+  maxMoves: 2             # largest number of moves in one plan
+  maxPlans: 5             # unschedulable pods planned for per run
+  alternatives: 3         # plans reported besides the recommended one
+  minPendingAge: 1m       # how long a pod must be unschedulable first
+  cooldown: 30m           # a moved workload is not moved again before this
+  moveTimeout: 5m
+  namespaces: ""          # comma-separated namespaces whose pods may move; empty means all
+  # Must match the HAMi scheduler's nvidia.defaultMemory, nvidia.defaultCores
+  # and nvidia.memoryFactor.
+  defaultMemory: 0
+  defaultCores: 0
+  memoryFactor: 1
+
+# ============================================================
 # Resource Limits
 # ============================================================
 resources:

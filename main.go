@@ -25,6 +25,7 @@ import (
 	v1 "gpu-descheduler/pkg/gpu-descheduler/api/v1"
 	"gpu-descheduler/pkg/gpu-descheduler/cache"
 	"gpu-descheduler/pkg/gpu-descheduler/controller"
+	"gpu-descheduler/pkg/gpu-descheduler/defrag"
 	defragwebhook "gpu-descheduler/pkg/gpu-descheduler/webhook"
 	"gpu-descheduler/pkg/schedulerclient"
 )
@@ -87,8 +88,30 @@ func main() {
 	flag.IntVar(&port, "port", 8443, "webhook https listen port")
 	flag.IntVar(&port, "webhook-port", 8443, "Deprecated: use --port.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", true, "enable leader election for HA")
+	var defragEnabled bool
+	var defragNamespaces, defragMode, defragScope string
+	defragOpts := defrag.DefaultOptions()
+	flag.BoolVar(&defragEnabled, "defrag-enabled", false, "Plan GPU defragmentation for unschedulable HAMi pods")
+	flag.StringVar(&defragMode, "defrag-mode", string(defragOpts.Mode), "dryRun only reports plans; execute also carries them out")
+	flag.StringVar(&defragScope, "defrag-scope", string(defragOpts.Scope), "sameNode keeps moved pods on their node; crossNode lets them move to another node")
+	flag.DurationVar(&defragOpts.Interval, "defrag-interval", defragOpts.Interval, "Interval between defrag runs")
+	flag.IntVar(&defragOpts.MaxMoves, "defrag-max-moves", defragOpts.MaxMoves, "Largest number of moves in one plan")
+	flag.IntVar(&defragOpts.MaxPlans, "defrag-max-plans", defragOpts.MaxPlans, "Largest number of unschedulable pods planned for per run")
+	flag.IntVar(&defragOpts.Alternatives, "defrag-alternatives", defragOpts.Alternatives, "Plans reported besides the recommended one")
+	flag.DurationVar(&defragOpts.MinPendingAge, "defrag-min-pending-age", defragOpts.MinPendingAge, "How long a pod must be unschedulable before it is planned for")
+	flag.DurationVar(&defragOpts.Cooldown, "defrag-cooldown", defragOpts.Cooldown, "How long a workload is not moved again after a move")
+	flag.DurationVar(&defragOpts.MoveTimeout, "defrag-move-timeout", defragOpts.MoveTimeout, "Time a move, and the wait for the pod after the last move, may take")
+	flag.StringVar(&defragNamespaces, "defrag-namespaces", "", "Comma-separated namespaces whose pods may be moved; empty means all")
+	flag.Int64Var(&defragOpts.DefaultMemoryMB, "defrag-default-memory", 0, "The HAMi scheduler's nvidia.defaultMemory, in MB")
+	flag.Int64Var(&defragOpts.DefaultCores, "defrag-default-cores", 0, "The HAMi scheduler's nvidia.defaultCores")
+	flag.Int64Var(&defragOpts.MemoryFactor, "defrag-memory-factor", defragOpts.MemoryFactor, "The HAMi scheduler's nvidia.memoryFactor")
 	klog.InitFlags(nil)
 	flag.Parse()
+	defragOpts.Mode, defragOpts.Scope = defrag.Mode(defragMode), defrag.Scope(defragScope)
+	defragOpts.Namespaces = defrag.ParseNamespaces(defragNamespaces)
+	if err := defragOpts.Validate(); defragEnabled && err != nil {
+		log.Fatalf("invalid defrag flags: %v", err)
+	}
 
 	ctrl.SetLogger(klog.NewKlogr())
 
@@ -227,6 +250,16 @@ func main() {
 	}
 	setupLog.Info("Controller registered successfully")
 
+	var defragRunner *defrag.Runner
+	if defragEnabled {
+		defragRunner = defrag.NewRunner(mgr.GetClient(), mgr.GetAPIReader(), defragOpts)
+		if err := mgr.Add(defragRunner); err != nil {
+			setupLog.Error(err, "unable to add the defrag runner")
+			os.Exit(1)
+		}
+		setupLog.Info("GPU defragmentation enabled", "mode", defragOpts.Mode, "scope", defragOpts.Scope)
+	}
+
 	decoder := admission.NewDecoder(scheme)
 
 	podMutator := &defragwebhook.PodMutator{
@@ -252,6 +285,9 @@ func main() {
 
 	apiMux := http.NewServeMux()
 	RegisterAllAPIHandlers(apiMux, clusterState, placementCache)
+	if defragRunner != nil {
+		RegisterDefragAPIHandlers(apiMux, defragRunner)
+	}
 
 	apiServer := &http.Server{
 		Addr:    ":8083",
