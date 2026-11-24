@@ -4,7 +4,7 @@
 # ============================================
 # Stage 1: build the Go binary
 # ============================================
-FROM golang:1.27.4-bookworm AS builder
+FROM golang:1.27.4-bookworm@sha256:b754301872c53d3dff666ec39e3fae971dc6f5ecd5a9b01fdefabbebb0f59901 AS builder
 
 ARG TARGETOS
 ARG TARGETARCH
@@ -46,7 +46,7 @@ RUN GO_VERSION=$(go version | awk '{print $3}') && \
 # ============================================
 # Stage 2: runtime image
 # ============================================
-FROM debian:bookworm-slim
+FROM debian:bookworm-slim@sha256:e67eeead736ff7bbe258ef088bff683635c561b1fcfefad0806c1df4ab49ce0e
 
 # Avoid interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
