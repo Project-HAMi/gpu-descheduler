@@ -58,7 +58,6 @@ kubectl get pods -n kube-system -l app=gpu-descheduler-webhook -w
 # Expected output:
 NAME                                      READY   STATUS    RESTARTS   AGE
 gpu-descheduler-webhook-5f7d9c6b4d-abc12  1/1     Running   0          60s
-gpu-descheduler-webhook-5f7d9c6b4d-def34  1/1     Running   0          60s
 ```
 
 ## Viewing Status with Curl
