@@ -1,91 +1,78 @@
-# HAMi GPU Descheduler Webhook
+# HAMi GPU Descheduler
 
-## Project Overview
+[![CI](https://github.com/Project-HAMi/gpu-descheduler/actions/workflows/ci.yml/badge.svg)](https://github.com/Project-HAMi/gpu-descheduler/actions/workflows/ci.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Project-HAMi/gpu-descheduler/badge)](https://scorecard.dev/viewer/?uri=github.com/Project-HAMi/gpu-descheduler)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-**HAMi GPU Descheduler** is a specialized GPU defragmentation tool built for **HAMi**. It uses a **Mutating Admission Webhook** and **Custom Resource Definitions (CRDs)** to achieve fine-grained scheduling control over GPU workloads on HAMi virtualized nodes. It has the following features:
+[中文](README_CN.md)
 
-- **GPU Defragmentation**: Consolidates scattered GPU resources across nodes to improve cluster utilization
-- **Precise Binding**: Schedules Pods to specific nodes and GPU devices
-- **Active Eviction**: Supports evicting existing Pods and rescheduling them to target nodes
+The descheduler moves GPU Pods on [HAMi](https://github.com/Project-HAMi/HAMi) clusters. You tell it where a Pod should go with a `HamiPodPlacement`. It can evict the old Pod, and it pins the next matching Pod to the GPUs you chose.
 
+It does not pick Pods to move by itself yet. See [#36](https://github.com/Project-HAMi/gpu-descheduler/issues/36).
 
-## Prerequisites
+## Requirements
 
-### Required Dependencies
+| Component | Version |
+|-----------|---------|
+| HAMi | v2.10.0 or later. Tested with v2.10.0 and v2.11.0. |
+| Kubernetes | v1.24 or later. Tested with v1.24 and v1.36. |
+| Helm | v3.8 or later |
 
-| Component | Version/Status |
-|-----------|---------------|
-| **HAMi Scheduler** | v2.10.0+ |
-| Kubernetes | v1.24+ (v1.28+ recommended) |
-| Helm | v3.8+ |
+## Install
 
+Install a release:
 
-## Documentation
+```bash
+helm install gpu-descheduler oci://docker.io/projecthami/gpu-descheduler-webhook \
+  --version 0.0.2-chart --namespace kube-system
+```
 
-- 📘 [中文](README_CN.md)
+The chart lives next to the image on Docker Hub, tagged `<version>-chart`. Images after v0.0.2 are signed with cosign and ship an SBOM.
+
+Install from source:
+
+```bash
+helm install gpu-descheduler ./chart --namespace kube-system --create-namespace
+```
+
+Everything goes into the namespace you pass with `--namespace`.
+
+Check that it runs:
+
+```bash
+kubectl get pods -n kube-system -l app=gpu-descheduler-webhook
+```
+
+To remove it, including the CRD and the TLS Secret:
+
+```bash
+NAMESPACE=kube-system ./chart/uninstall-gpu-descheduler.sh
+```
 
 ## Build
 
-The project provides an automated build script. **Using the script is recommended** over manual `docker build`:
+Build the image with `./build-image.sh`. Run `./build-image.sh -h` for options. Building the binary needs the Go version from `go.mod`.
 
-```bash
-./build-image.sh
-```
+## Connecting to HAMi
 
-See [build-image.sh](build-image.sh) for details.
+The descheduler reads GPU usage from the HAMi scheduler metrics. It finds them through the HAMi scheduler Service. If HAMi runs under another name or namespace, set these in the chart `args`:
 
-## Deployment
-
-### Deployment with helm install
-
-```bash
-helm install gpu-descheduler ./chart --namespace kube-system --create-namespace --debug
-```
-
-**Parameter Reference:**
-| Parameter | Description |
-|-----------|-------------|
-| `--namespace` | Target deployment namespace |
-| `--create-namespace` | Auto-create namespace if it doesn't exist |
-| `--debug` | Show detailed debug information |
-
-
-## Verifying the Deployment
-
-```bash
-kubectl get pods -n kube-system -l app=gpu-descheduler-webhook -w
-
-# Expected output:
-NAME                                      READY   STATUS    RESTARTS   AGE
-gpu-descheduler-webhook-5f7d9c6b4d-abc12  1/1     Running   0          60s
-```
-
-## Viewing Status with Curl
-
-The webhook service provides **two core REST API endpoints**, listening on port **8083** inside the container (the webhook itself listens on 8443, metrics on 8080 and health probes on 8081):
-
-| Endpoint | Purpose | Returned Information |
-|----------|---------|---------------------|
-| `/api/v1/cluster-info` | Cluster state information | Node list, GPU devices, health status, last sync time |
-| `/api/v1/placements` | Placement CRD cache | Allocation records, consumption status, matched Pod info |
-
-
-```bash
-# Inside the container
-curl -s http://localhost:8083/api/v1/cluster-info | jq .
-```
+| Flag | Default | Meaning |
+|------|---------|---------|
+| `--scheduler-namespace` | `kube-system` | Namespace of the HAMi scheduler Service |
+| `--scheduler-service` | `hami-scheduler` | Name of the HAMi scheduler Service |
+| `--scheduler-port` | `9395` | Metrics port of the HAMi scheduler container |
+| `--sync-interval` | `1m` | How often GPU usage is read |
 
 ## Usage
-You need to create a CRD to guide this de-scheduler. The CRD manifest is `chart/templates/crd/hamipodplacement.yaml`. `helm install` applies it with the chart. The schema is maintained in that file. This repo has no `controller-gen` target for it.
 
-Install the CRD on its own:
+The CRD is in `chart/templates/crd/hamipodplacement.yaml`. The chart installs it. To install it alone:
 
 ```bash
 kubectl apply -f chart/templates/crd/hamipodplacement.yaml
-kubectl get crd hamipodplacements.scheduling.hami.placement.com
 ```
 
-One `HamiPodPlacement` is consumed by one Pod. The Pod must use `schedulerName: hami-scheduler` and match `podSelector`:
+A placement is used by one Pod. That Pod must use `schedulerName: hami-scheduler` and match `podSelector`.
 
 ```yaml
 apiVersion: scheduling.hami.placement.com/v1
@@ -94,16 +81,46 @@ metadata:
   name: pin-gpu0
   namespace: default
 spec:
-  reqID: "pin-gpu0-001"          # min length 5, consumed once
+  reqID: "pin-gpu0-001"          # at least 5 characters, used once
   podSelector:
     matchLabels:
       app: my-job
   nodeName: gpu-node-1
   gpuDevices:
     - gpu-0                      # or gpu-0/70
-  evictPod: my-job-6cd5964877-zdb5z   # Pod name in this namespace
+  evictPod: my-job-6cd5964877-zdb5z   # optional, Pod in the same namespace
 ```
 
 ```bash
 kubectl get hamipodplacements -A
 ```
+
+More examples are in [deploy/yaml/pod-placement-demo.yaml](deploy/yaml/pod-placement-demo.yaml).
+
+### Eviction
+
+Before it evicts `evictPod`, the controller checks the target GPUs. They must exist and have room for the Pod. If not, the placement fails and the Pod keeps running.
+
+The freed capacity is not reserved. Another Pod can take it before the replacement is scheduled. See [#10](https://github.com/Project-HAMi/gpu-descheduler/issues/10).
+
+### Phases
+
+| Phase | Meaning |
+|-------|---------|
+| `EvictingOldPod` | Evicting the Pod in `evictPod` |
+| `Pending` | Target checked, waiting for a matching Pod |
+| `Matched` | A matching Pod was created with this placement |
+| `Completed` | The matching Pod is running |
+| `Failed` | Something went wrong. See `message`. |
+
+## Debugging
+
+The descheduler serves its state on port 8083:
+
+```bash
+kubectl -n kube-system port-forward deploy/gpu-descheduler-webhook 8083 &
+curl -s localhost:8083/api/v1/cluster-info   # nodes and GPUs
+curl -s localhost:8083/api/v1/placements     # placements
+```
+
+Other ports: webhook 8443, metrics 8080, health probes 8081.

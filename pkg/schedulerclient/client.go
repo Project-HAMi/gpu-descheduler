@@ -42,6 +42,8 @@ type ClusterInfoResponse struct {
 }
 
 // PodDeviceAllocation is the GPU share HAMi allocated to one Pod on one device.
+// Series that share a Pod and device are summed; HAMi v2.10 adds a
+// container_index label to them.
 type PodDeviceAllocation struct {
 	Namespace  string `json:"namespace"`
 	Pod        string `json:"pod"`
@@ -212,11 +214,11 @@ func parseMetricsToClusterInfo(reader io.Reader) (*ClusterInfoResponse, error) {
 				coreAllocated[uuid] = value
 			case "hami_vgpu_memory_allocated_bytes":
 				if labels["pod"] != "" {
-					podAllocation(labels).Mem = bytesToMiB(value)
+					podAllocation(labels).Mem += bytesToMiB(value)
 				}
 			case "hami_vgpu_core_allocated_ratio":
 				if labels["pod"] != "" {
-					podAllocation(labels).Cores = value
+					podAllocation(labels).Cores += value
 				}
 			}
 			continue

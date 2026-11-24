@@ -34,3 +34,7 @@ updates:
       github-actions:
         patterns:
           - '*'
+    ignore:
+      # The v2.6.0 container image is missing from ghcr.io, so the action cannot run.
+      - dependency-name: ossf/scorecard-action
+        versions: ['2.6.0']

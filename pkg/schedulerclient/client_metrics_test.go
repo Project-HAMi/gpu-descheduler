@@ -229,3 +229,21 @@ hami_vgpu_core_allocated_ratio{device_uuid="GPU-a",namespace="default",node="n1"
 		t.Fatalf("pod allocations %+v, want %+v", resp.PodAllocations, want)
 	}
 }
+
+func TestParseMetricsSumsContainerAllocations(t *testing.T) {
+	// Series that differ only in container_index (HAMi v2.10 label) belong to one Pod.
+	metrics := `hami_node_gpu_overview{device_cores="100",device_index="0",device_memory_limit="24576",device_type="NVIDIA",device_uuid="GPU-a",node="n1"} 0
+hami_vgpu_memory_allocated_bytes{container_index="0",device_uuid="GPU-a",namespace="default",node="n1",pod="multi"} 4.194304e+09
+hami_vgpu_memory_allocated_bytes{container_index="1",device_uuid="GPU-a",namespace="default",node="n1",pod="multi"} 6.291456e+09
+hami_vgpu_core_allocated_ratio{container_index="0",device_uuid="GPU-a",namespace="default",node="n1",pod="multi"} 20
+hami_vgpu_core_allocated_ratio{container_index="1",device_uuid="GPU-a",namespace="default",node="n1",pod="multi"} 30
+`
+	resp, err := parseMetricsToClusterInfo(strings.NewReader(metrics))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := PodDeviceAllocation{Namespace: "default", Pod: "multi", DeviceUUID: "GPU-a", Mem: 10000, Cores: 50}
+	if len(resp.PodAllocations) != 1 || resp.PodAllocations[0] != want {
+		t.Fatalf("pod allocations %+v, want %+v", resp.PodAllocations, want)
+	}
+}

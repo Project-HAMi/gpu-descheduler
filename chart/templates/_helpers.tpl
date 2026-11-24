@@ -15,3 +15,19 @@ release: {{ .Release.Name }}
 app: {{ include "gpu-descheduler-webhook.fullname" . }}
 release: {{ .Release.Name }}
 {{- end -}}
+
+{{/* Namespace for all namespaced resources: values.namespace, or the release namespace */}}
+{{- define "gpu-descheduler-webhook.namespace" -}}
+{{- default .Release.Namespace .Values.namespace -}}
+{{- end -}}
+
+{{/* Webhook container image */}}
+{{- define "gpu-descheduler-webhook.image" -}}
+{{- $repo := .Values.image.repository | default "projecthami/gpu-descheduler-webhook" -}}
+{{- $tag := .Values.image.tag | default (printf "v%s" (trimPrefix "v" .Chart.AppVersion)) -}}
+{{- if .Values.image.registry -}}
+{{ .Values.image.registry }}/{{ $repo }}:{{ $tag }}
+{{- else -}}
+{{ $repo }}:{{ $tag }}
+{{- end -}}
+{{- end -}}

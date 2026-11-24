@@ -1,92 +1,78 @@
-# HAMi GPU Descheduler Webhook
+# HAMi GPU Descheduler
 
-## 项目简介
+[![CI](https://github.com/Project-HAMi/gpu-descheduler/actions/workflows/ci.yml/badge.svg)](https://github.com/Project-HAMi/gpu-descheduler/actions/workflows/ci.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Project-HAMi/gpu-descheduler/badge)](https://scorecard.dev/viewer/?uri=github.com/Project-HAMi/gpu-descheduler)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-**HAMi GPU Descheduler** 是面向 **HAMi** 的专用 GPU 碎片整理工具。它通过 **Mutating Admission Webhook** 和 **自定义资源（CRD）**，对 HAMi 虚拟化节点上的 GPU 作业做精细化调度控制。功能包括：
+[English](README.md)
 
-- **GPU 碎片整理**：将分散在不同节点的 GPU 资源整合，提升集群利用率
-- **精确绑定**：将 Pod 调度到指定节点和 GPU 设备
-- **主动驱逐**：驱逐现有 Pod，并重新调度到目标节点
+descheduler 用来在 [HAMi](https://github.com/Project-HAMi/HAMi) 集群里迁移 GPU Pod。你用 `HamiPodPlacement` 指定 Pod 去哪里。它可以驱逐旧 Pod，并把下一个匹配的 Pod 固定到你选的 GPU 上。
 
+它目前不会自己挑选要迁移的 Pod。见 [#36](https://github.com/Project-HAMi/gpu-descheduler/issues/36)。
 
 ## 环境要求
 
-### 前置依赖
-
-| 组件 | 版本/状态 |
-|------|----------|
-| **HAMi Scheduler** | v2.10.0+ |
-| Kubernetes | v1.24+（推荐 v1.28+） |
-| Helm | v3.8+ |
-
-
-## 文档
-
-- 📘 [English](README.md)
-
-## 构建镜像
-
-项目提供了自动化构建脚本，**推荐使用脚本构建**而非手动 `docker build`：
-
-```bash
-./build-image.sh
-```
-
-详细说明参见：[build-image.sh](build-image.sh)
-
-## 部署
-
-### 使用 helm install 部署
-
-```bash
-helm install gpu-descheduler ./chart --namespace kube-system --create-namespace --debug
-```
-
-**参数说明：**
-| 参数 | 说明 |
+| 组件 | 版本 |
 |------|------|
-| `--namespace` | 部署目标命名空间 |
-| `--create-namespace` | 自动创建命名空间（如果不存在） |
-| `--debug` | 显示详细的调试信息 |
+| HAMi | v2.10.0 及以上。已在 v2.10.0 和 v2.11.0 上测试。 |
+| Kubernetes | v1.24 及以上。已在 v1.24 和 v1.36 上测试。 |
+| Helm | v3.8 及以上 |
 
+## 安装
 
-## 验证部署
-
-```bash
-kubectl get pods -n kube-system -l app=gpu-descheduler-webhook -w
-
-# 预期输出：
-NAME                                      READY   STATUS    RESTARTS   AGE
-gpu-descheduler-webhook-5f7d9c6b4d-abc12  1/1     Running   0          60s
-```
-
-## 使用 Curl 查看状态
-
-Webhook 服务提供 **两个核心 REST API 端点**，监听在容器内的 **8083** 端口（Webhook 本身监听 8443，指标 8080，健康探针 8081）：
-
-| 端点路径 | 用途 | 返回信息 |
-|---------|------|---------|
-| `/api/v1/cluster-info` | 集群状态信息 | 节点列表、GPU 设备、健康状态、最后同步时间 |
-| `/api/v1/placements` | Placement CRD 缓存 | 分配记录、消费状态、匹配的 Pod 信息 |
-
+安装发布版本：
 
 ```bash
-# 在容器内执行
-curl -s http://localhost:8083/api/v1/cluster-info | jq .
+helm install gpu-descheduler oci://docker.io/projecthami/gpu-descheduler-webhook \
+  --version 0.0.2-chart --namespace kube-system
 ```
+
+chart 和镜像放在 Docker Hub 的同一个仓库，标签是 `<版本>-chart`。v0.0.2 之后的镜像用 cosign 签名，并附带 SBOM。
+
+从源码安装：
+
+```bash
+helm install gpu-descheduler ./chart --namespace kube-system --create-namespace
+```
+
+所有资源都装在 `--namespace` 指定的命名空间里。
+
+检查是否运行：
+
+```bash
+kubectl get pods -n kube-system -l app=gpu-descheduler-webhook
+```
+
+卸载（包括 CRD 和 TLS Secret）：
+
+```bash
+NAMESPACE=kube-system ./chart/uninstall-gpu-descheduler.sh
+```
+
+## 构建
+
+用 `./build-image.sh` 构建镜像，`./build-image.sh -h` 查看参数。编译二进制需要 `go.mod` 里的 Go 版本。
+
+## 连接 HAMi
+
+descheduler 从 HAMi 调度器的 metrics 读取 GPU 用量，通过 HAMi 调度器的 Service 找到它。如果 HAMi 用了别的名称或命名空间，在 chart 的 `args` 里设置：
+
+| 参数 | 默认值 | 含义 |
+|------|--------|------|
+| `--scheduler-namespace` | `kube-system` | HAMi 调度器 Service 的命名空间 |
+| `--scheduler-service` | `hami-scheduler` | HAMi 调度器 Service 的名称 |
+| `--scheduler-port` | `9395` | HAMi 调度器容器的 metrics 端口 |
+| `--sync-interval` | `1m` | 读取 GPU 用量的间隔 |
 
 ## 使用
 
-你需要创建CRD来进行使用。CRD 清单在 `chart/templates/crd/hamipodplacement.yaml`。`helm install` 会随 chart 一起装上。字段定义就维护在这个文件里，仓库里没有用 `controller-gen` 生成它的步骤。
-
-只安装 CRD：
+CRD 在 `chart/templates/crd/hamipodplacement.yaml`，chart 会自动安装。单独安装：
 
 ```bash
 kubectl apply -f chart/templates/crd/hamipodplacement.yaml
-kubectl get crd hamipodplacements.scheduling.hami.placement.com
 ```
 
-一份 `HamiPodPlacement` 只会被一个 Pod 消费。Pod 的 `schedulerName` 必须是 `hami-scheduler`，并且要匹配 `podSelector`：
+一个 placement 只给一个 Pod 用。这个 Pod 必须使用 `schedulerName: hami-scheduler`，并匹配 `podSelector`。
 
 ```yaml
 apiVersion: scheduling.hami.placement.com/v1
@@ -95,16 +81,46 @@ metadata:
   name: pin-gpu0
   namespace: default
 spec:
-  reqID: "pin-gpu0-001"          # 最短 5 个字符，只消费一次
+  reqID: "pin-gpu0-001"          # 至少 5 个字符，只用一次
   podSelector:
     matchLabels:
       app: my-job
   nodeName: gpu-node-1
   gpuDevices:
     - gpu-0                      # 或 gpu-0/70
-  evictPod: my-job-6cd5964877-zdb5z   # 同一命名空间里的 Pod 名
+  evictPod: my-job-6cd5964877-zdb5z   # 可选，同一命名空间里的 Pod
 ```
 
 ```bash
 kubectl get hamipodplacements -A
 ```
+
+更多示例见 [deploy/yaml/pod-placement-demo.yaml](deploy/yaml/pod-placement-demo.yaml)。
+
+### 驱逐
+
+驱逐 `evictPod` 之前，控制器会检查目标 GPU。GPU 必须存在，并且放得下这个 Pod。否则 placement 失败，Pod 继续运行。
+
+释放出来的容量不会预留。新 Pod 调度之前，别的 Pod 可能先占用。见 [#10](https://github.com/Project-HAMi/gpu-descheduler/issues/10)。
+
+### 阶段
+
+| 阶段 | 含义 |
+|------|------|
+| `EvictingOldPod` | 正在驱逐 `evictPod` 中的 Pod |
+| `Pending` | 目标已检查，等待匹配的 Pod |
+| `Matched` | 匹配的 Pod 已用这个 placement 创建 |
+| `Completed` | 匹配的 Pod 正在运行 |
+| `Failed` | 出错了，原因见 `message` |
+
+## 调试
+
+descheduler 在 8083 端口提供状态：
+
+```bash
+kubectl -n kube-system port-forward deploy/gpu-descheduler-webhook 8083 &
+curl -s localhost:8083/api/v1/cluster-info   # 节点和 GPU
+curl -s localhost:8083/api/v1/placements     # placement
+```
+
+其他端口：webhook 8443，metrics 8080，健康检查 8081。

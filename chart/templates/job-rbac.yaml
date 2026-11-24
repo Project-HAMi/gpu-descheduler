@@ -9,7 +9,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: {{ include "gpu-descheduler-webhook.fullname" . }}-create-job
-  namespace: {{ .Values.namespace }}
+  namespace: {{ include "gpu-descheduler-webhook.namespace" . }}
   annotations:
     "helm.sh/hook": pre-install,pre-upgrade
     "helm.sh/hook-weight": "-3"
@@ -32,7 +32,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: {{ include "gpu-descheduler-webhook.fullname" . }}-create-job
-  namespace: {{ .Values.namespace }}
+  namespace: {{ include "gpu-descheduler-webhook.namespace" . }}
   annotations:
     "helm.sh/hook": pre-install,pre-upgrade
     "helm.sh/hook-weight": "-3"
@@ -47,7 +47,7 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: {{ include "gpu-descheduler-webhook.fullname" . }}
-    namespace: {{ .Values.namespace }}
+    namespace: {{ include "gpu-descheduler-webhook.namespace" . }}
 
 ---
 # ============================================================
@@ -58,7 +58,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: {{ include "gpu-descheduler-webhook.fullname" . }}-patch-job
-  namespace: {{ .Values.namespace }}
+  namespace: {{ include "gpu-descheduler-webhook.namespace" . }}
   annotations:
     "helm.sh/hook": post-install,post-upgrade
     "helm.sh/hook-weight": "-1"
@@ -78,7 +78,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: {{ include "gpu-descheduler-webhook.fullname" . }}-patch-job
-  namespace: {{ .Values.namespace }}
+  namespace: {{ include "gpu-descheduler-webhook.namespace" . }}
   annotations:
     "helm.sh/hook": post-install,post-upgrade
     "helm.sh/hook-weight": "-1"
@@ -93,7 +93,7 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: {{ include "gpu-descheduler-webhook.fullname" . }}
-    namespace: {{ .Values.namespace }}
+    namespace: {{ include "gpu-descheduler-webhook.namespace" . }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -135,5 +135,5 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: {{ include "gpu-descheduler-webhook.fullname" . }}
-    namespace: {{ .Values.namespace }}
+    namespace: {{ include "gpu-descheduler-webhook.namespace" . }}
 {{- end }}

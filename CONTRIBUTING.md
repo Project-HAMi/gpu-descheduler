@@ -14,9 +14,11 @@ You need the Go version from `go.mod`.
 
 ```bash
 go build ./...
-go vet ./pkg/...
-go test ./pkg/... -race -count=1
+go vet ./...
+go test ./... -race -count=1
 golangci-lint run
+go mod tidy && git diff --exit-code go.mod go.sum
+helm lint chart
 ```
 
 To build the image, run `./build-image.sh`. See the [README](README.md) for deployment.
@@ -28,11 +30,15 @@ To build the image, run `./build-image.sh`. See the [README](README.md) for depl
 3. Add a test that fails without your change.
 4. Open a pull request against `main`. Say what changed and why in a sentence, add a `/kind` line such as `/kind bug`, and link the issue with `Fixes #<number>`.
 
-CI runs build, tests, lint and an image build on every pull request. A change that touches GPU allocation should also be tried on real hardware, and the pull request should say which device and driver were used.
+CI runs the checks from "Build and test", plus govulncheck, CodeQL, an image build and DCO. All must pass before merge.
+
+If your change touches GPU allocation, test it on a real GPU. Say which GPU and driver you used.
 
 ## Review
 
-A reviewer leaves `/lgtm` and an approver leaves `/approve`. Both come from the people listed in [OWNERS](OWNERS). Answer review comments with code changes where you can.
+A reviewer from [OWNERS](OWNERS) leaves `/lgtm`. An approver leaves `/approve`. The bot then merges.
+
+`main` needs one approval, green checks and all review threads resolved. Answer review comments with code where you can.
 
 ## Reporting security problems
 
