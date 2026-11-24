@@ -115,6 +115,14 @@ func TestParseOverviewMetricLine(t *testing.T) {
 			expectedMemory: 16384,
 		},
 		{
+			name:           "quoted delimiters in device type",
+			line:           `hami_node_gpu_overview{device_type="GPU, rev } B",node="node1",device_uuid="GPU-001",device_index="0",device_memory_limit="1024"} 0`,
+			expectedNode:   "node1",
+			expectedUUID:   "GPU-001",
+			expectedType:   "GPU, rev } B",
+			expectedMemory: 1024,
+		},
+		{
 			name:         "invalid format - missing braces",
 			line:         `hami_node_gpu_overview node="x" 123`,
 			expectedNode: "",
