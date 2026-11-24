@@ -30,24 +30,22 @@ func GetPersistenceDir() string {
 	return persistenceDir
 }
 
-func ensurePersistenceDir() error {
-	dir := GetPersistenceDir()
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("failed to create persistence directory %s: %w", dir, err)
-	}
-	return nil
-}
-
 func getPersistenceFilePath() string {
 	return filepath.Join(GetPersistenceDir(), PersistenceFileName)
 }
 
+// SaveConsumedReqIDsToFile writes the consumed ReqIDs to the persistence file.
+// It must not be called with consumedReqMu held.
 func SaveConsumedReqIDsToFile() error {
 	persistenceMu.Lock()
 	defer persistenceMu.Unlock()
 
-	if err := ensurePersistenceDir(); err != nil {
-		return err
+	// persistenceMu is held, so read persistenceDir directly; the getters
+	// take the same lock and would block forever.
+	dir := persistenceDir
+	filePath := filepath.Join(dir, PersistenceFileName)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create persistence directory %s: %w", dir, err)
 	}
 
 	consumedReqMu.RLock()
@@ -62,18 +60,18 @@ func SaveConsumedReqIDsToFile() error {
 		return fmt.Errorf("failed to marshal consumed ReqIDs: %w", err)
 	}
 
-	tmpFile := getPersistenceFilePath() + ".tmp"
+	tmpFile := filePath + ".tmp"
 	if err := os.WriteFile(tmpFile, jsonData, 0644); err != nil {
 		return fmt.Errorf("failed to write temp file: %w", err)
 	}
 
-	if err := os.Rename(tmpFile, getPersistenceFilePath()); err != nil {
+	if err := os.Rename(tmpFile, filePath); err != nil {
 		_ = os.Remove(tmpFile)
 		return fmt.Errorf("failed to rename temp file: %w", err)
 	}
 
 	klog.V(3).InfoS("Saved consumed ReqIDs to file",
-		"file", getPersistenceFilePath(),
+		"file", filePath,
 		"count", len(data))
 
 	return nil
