@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "gpu-descheduler-webhook.fullname" . }}
-  namespace: {{ .Values.namespace }}
+  namespace: {{ include "gpu-descheduler-webhook.namespace" . }}
   labels:
     {{- include "gpu-descheduler-webhook.labels" . | nindent 4 }}
 spec:
@@ -26,13 +26,8 @@ spec:
       {{- end }}
       containers:
         - name: webhook
-          {{- if .Values.image }}
-          image: "{{ .Values.image.repository | default "hami/gpu-descheduler-webhook" }}:{{ .Values.image.tag | default "latest" }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy | default "Always" }}
-          {{- else }}
-          image: "hami/gpu-descheduler-webhook:latest"
-          imagePullPolicy: Always
-          {{- end }}
+          image: {{ include "gpu-descheduler-webhook.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
           {{- if .Values.args }}
           args: {{- toYaml .Values.args | nindent 12 }}
           {{- else }}

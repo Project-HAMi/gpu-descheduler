@@ -2,7 +2,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: {{ include "gpu-descheduler-webhook.fullname" . }}
-  namespace: {{ .Values.namespace }}
+  namespace: {{ include "gpu-descheduler-webhook.namespace" . }}
   labels:
     {{- include "gpu-descheduler-webhook.labels" . | nindent 4 }}
 spec:

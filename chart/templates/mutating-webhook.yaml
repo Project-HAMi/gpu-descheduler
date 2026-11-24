@@ -23,7 +23,7 @@ webhooks:
     admissionReviewVersions: ["v1", "v1beta1"]
     clientConfig:
       service:
-        namespace: {{ .Values.namespace }}
+        namespace: {{ include "gpu-descheduler-webhook.namespace" . }}
         name: {{ include "gpu-descheduler-webhook.fullname" . }}
         path: /mutate
       # Do not specify port, let Kubernetes auto-use the Service default port (443)

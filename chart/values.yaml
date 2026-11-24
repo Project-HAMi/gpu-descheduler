@@ -4,7 +4,8 @@
 # ============================================================
 # Namespace
 # ============================================================
-namespace: kube-system
+# Empty installs into the release namespace (helm install -n <namespace>).
+namespace: ""
 
 # ============================================================
 # Image Config
@@ -13,7 +14,7 @@ image:
   registry: docker.io
   repository: projecthami/gpu-descheduler-webhook
   tag: v0.0.2
-  pullPolicy: Always
+  pullPolicy: IfNotPresent
 
 # If Harbor requires auth, uncomment and configure:
 # imagePullSecrets:

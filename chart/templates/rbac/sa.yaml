@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: {{ include "gpu-descheduler-webhook.fullname" . }}
-  namespace: {{ .Values.namespace }}
+  namespace: {{ include "gpu-descheduler-webhook.namespace" . }}
   annotations:
     "helm.sh/hook": pre-install,pre-upgrade
     "helm.sh/hook-weight": "-5"
