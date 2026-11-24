@@ -31,6 +31,10 @@ jobs:
           results_file: results.sarif
           results_format: sarif
           publish_results: true
+          # The default token cannot read classic branch protection rules.
+          # SCORECARD_TOKEN is a fine-grained PAT with read-only Administration
+          # access to this repository; without it the default token is used.
+          repo_token: ${{ secrets.SCORECARD_TOKEN || github.token }}
 
       - name: Upload results artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
