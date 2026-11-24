@@ -58,9 +58,11 @@ repository:
       self:
         comment: |
           Dependabot keeps dependencies current. Every pull request runs
-          tests, lint, govulncheck and CodeQL. main needs green checks
-          and one review. Actions are pinned to commit SHAs. Release
-          images are signed with cosign and ship an SBOM.
+          tests, lint, govulncheck, CodeQL and fuzz tests for the input
+          parsers. main needs green checks and one review. Actions are
+          pinned to commit SHAs and base images to digests. Release
+          images are signed with cosign and ship an SBOM. GitHub
+          releases carry the chart package and its cosign bundle.
     tools:
       - name: Dependabot
         type: SCA
@@ -112,6 +114,19 @@ repository:
         results: {}
         comment: |
           Scans Go code and workflows on every pull request and weekly.
+      - name: Go fuzzing
+        type: fuzzing
+        version: latest
+        rulesets:
+          - built-in
+        integration:
+          adhoc: false
+          ci: true
+          release: false
+        results: {}
+        comment: |
+          Fuzzes the HAMi metrics parser and the gpu-N/core device spec
+          parser for 60 seconds each on every pull request.
       - name: OpenSSF Scorecard
         type: other
         version: v2.5.0
@@ -135,4 +150,5 @@ repository:
           release: true
         results: {}
         comment: |
-          Signs release images. Buildx adds SBOM and provenance.
+          Signs release images and the chart package attached to each
+          GitHub release. Buildx adds SBOM and provenance.
