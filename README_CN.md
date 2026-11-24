@@ -22,7 +22,7 @@
 
 ## 文档
 
-- 📘 [English](readme.md)
+- 📘 [English](README.md)
 
 ## 构建镜像
 
@@ -39,7 +39,7 @@
 ### 使用 helm install 部署
 
 ```bash
-helm install gpu-descheduler . --namespace kube-system --create-namespace --debug
+helm install gpu-descheduler ./chart --namespace kube-system --create-namespace --debug
 ```
 
 **参数说明：**
@@ -48,24 +48,21 @@ helm install gpu-descheduler . --namespace kube-system --create-namespace --debu
 | `--namespace` | 部署目标命名空间 |
 | `--create-namespace` | 自动创建命名空间（如果不存在） |
 | `--debug` | 显示详细的调试信息 |
-| `--timeout 5m` | 设置超时时间为 5 分钟 |
-| `-f values.yaml` | 使用自定义配置文件（可选） |
 
 
 ## 验证部署
 
 ```bash
-kubectl get pods -n kube-system -l app.kubernetes/name=gpu-descheduler-webhook -w
+kubectl get pods -n kube-system -l app=gpu-descheduler-webhook -w
 
 # 预期输出：
 NAME                                      READY   STATUS    RESTARTS   AGE
 gpu-descheduler-webhook-5f7d9c6b4d-abc12  1/1     Running   0          60s
-gpu-descheduler-webhook-5f7d9c6b4d-def34  1/1     Running   0          60s
 ```
 
 ## 使用 Curl 查看状态
 
-Webhook 服务提供 **两个核心 REST API 端点**，监听在容器内的 **8083** 端口：
+Webhook 服务提供 **两个核心 REST API 端点**，监听在容器内的 **8083** 端口（Webhook 本身监听 8443，指标 8080，健康探针 8081）：
 
 | 端点路径 | 用途 | 返回信息 |
 |---------|------|---------|

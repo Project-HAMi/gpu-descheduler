@@ -1,38 +1,38 @@
-# HAMi Intra-Defrag Webhook Dockerfile
-# 多阶段构建：编译阶段 + 运行阶段
+# GPU Descheduler Webhook Dockerfile
+# Multi-stage build: compile stage + runtime stage
 
 # ============================================
-# 阶段 1: 编译 Go 二进制文件
+# Stage 1: build the Go binary
 # ============================================
 FROM golang:1.26.6-bookworm AS builder
 
 ARG TARGETOS
 ARG TARGETARCH
 
-# 设置 Go 模块代理（国内用户可使用 goproxy.cn）
+# Go module proxy (goproxy.cn helps users in China)
 ARG GOPROXY=https://goproxy.cn,direct
 ENV GOPROXY=${GOPROXY}
 
-# 设置工作目录
+# Working directory
 WORKDIR /build
 
-# 先复制 go.mod 和 go.sum 以利用 Docker 缓存
+# Copy go.mod and go.sum first to use the Docker layer cache
 COPY go.mod go.sum ./
 
-# 下载依赖
+# Download dependencies
 RUN go mod download
 
-# 复制源代码
+# Copy sources
 COPY . .
 
-# 构建参数
+# Build arguments
 ARG VERSION=dev
 ARG REVISION=none
 ARG BUILD_DATE=
 
-# 构建二进制文件
-# CGO_ENABLED=1: HAMi/NVML 强依赖 CGO，不可关闭
-# TARGETOS/TARGETARCH 由 buildx 自动注入，每个平台用原生 gcc 编译
+# Build the binary
+# CGO_ENABLED=1: HAMi/NVML requires CGO
+# TARGETOS/TARGETARCH are injected by buildx, each platform builds with native gcc
 RUN GO_VERSION=$(go version | awk '{print $3}') && \
     CGO_ENABLED=1 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
     -ldflags="-s -w \
@@ -44,14 +44,14 @@ RUN GO_VERSION=$(go version | awk '{print $3}') && \
     .
 
 # ============================================
-# 阶段 2: 运行时镜像（轻量级）
+# Stage 2: runtime image
 # ============================================
 FROM debian:bookworm-slim
 
-# 避免交互式提示
+# Avoid interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
 
-# 安装基础依赖（ca-certificates 用于 HTTPS 请求）
+# Base packages (ca-certificates for HTTPS, curl for the health check)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         ca-certificates \
@@ -59,38 +59,38 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/* && \
     apt-get clean && \
     rm -rf /tmp/* /var/tmp/*
-# 创建非 root 用户（安全最佳实践）
+# Run as a non-root user
 RUN groupadd -r hami && useradd -r -g hami -s /sbin/nologin -M hami
 
-# 创建必要的目录
+# Certificate directory
 RUN mkdir -p /etc/webhook/certs && \
     chown -R hami:hami /etc/webhook/certs
 
-# 从构建阶段复制二进制文件
+# Copy the binary from the build stage
 COPY --from=builder /build/webhook-gpu-descheduler /webhook-gpu-descheduler
 
-# 设置权限
+# Permissions
 RUN chmod +x /webhook-gpu-descheduler && \
     chown hami:hami /webhook-gpu-descheduler
 
-# 切换到非 root 用户
+# Switch to the non-root user
 USER hami
 
-# 暴露端口
+# Ports: webhook, metrics, health probes
 EXPOSE 8443 8080 8081
 
-# 健康检查
+# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8081/readyz || exit 1
 
-# 设置环境变量
+# Environment
 ENV TLS_DIR=/etc/webhook/certs
 ENV PORT=8443
 ENV METRICS_BIND_ADDRESS=:8080
 ENV HEALTH_PROBE_BIND_ADDRESS=:8081
 
-# 入口点
+# Entrypoint
 ENTRYPOINT ["/webhook-gpu-descheduler"]
 
-# 默认参数
-CMD ["--tls-dir=/etc/webhook/certs", "--port=8443", "--metrics-bind-address=:8080", "--scheduler-port=9395", "--sync-interval=10s", "--enable-leader-election=true"]
+# Default arguments
+CMD ["--tls-dir=/etc/webhook/certs", "--port=8443", "--metrics-bind-address=:8080", "--scheduler-port=9395", "--sync-interval=60s", "--enable-leader-election=true"]
