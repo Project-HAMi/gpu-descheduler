@@ -25,7 +25,19 @@ helm install gpu-descheduler oci://docker.io/projecthami/gpu-descheduler-webhook
   --version 0.0.2-chart --namespace kube-system
 ```
 
-chart 和镜像放在 Docker Hub 的同一个仓库，标签是 `<版本>-chart`。v0.0.2 之后的镜像用 cosign 签名，并附带 SBOM。
+chart 和镜像放在 Docker Hub 的同一个仓库，标签是 `<版本>-chart`。v0.0.2 之后的镜像用 cosign 签名，并附带 SBOM。之后的版本还会把 chart 包和它的 cosign bundle 附在 GitHub release 上。验证方法：
+
+```bash
+ID='^https://github.com/Project-HAMi/gpu-descheduler/\.github/workflows/release\.yml@refs/tags/v'
+ISSUER=https://token.actions.githubusercontent.com
+
+cosign verify docker.io/projecthami/gpu-descheduler-webhook:<tag> \
+  --certificate-identity-regexp "$ID" --certificate-oidc-issuer "$ISSUER"
+
+cosign verify-blob gpu-descheduler-webhook-<版本>-chart.tgz \
+  --bundle gpu-descheduler-webhook-<版本>-chart.tgz.sigstore.json \
+  --certificate-identity-regexp "$ID" --certificate-oidc-issuer "$ISSUER"
+```
 
 从源码安装：
 
