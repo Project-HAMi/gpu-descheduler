@@ -848,6 +848,19 @@ func UnmarkReqIDConsumed(reqID string) {
 // Deletes all records where ConsumedAt exceeds TTL to prevent unlimited memory and disk growth
 // Automatically persists to file after cleanup is complete
 func CleanExpiredConsumedReqIDs() (int, error) {
+	cleanedCount := cleanExpiredConsumedReqIDs()
+	if cleanedCount == 0 {
+		return 0, nil
+	}
+	// Save takes consumedReqMu itself, so it runs after the lock is released.
+	if err := SaveConsumedReqIDsToFile(); err != nil {
+		klog.ErrorS(err, "Failed to persist ReqIDs after cleanup")
+		return cleanedCount, err
+	}
+	return cleanedCount, nil
+}
+
+func cleanExpiredConsumedReqIDs() int {
 	consumedReqMu.Lock()
 	defer consumedReqMu.Unlock()
 
@@ -864,7 +877,7 @@ func CleanExpiredConsumedReqIDs() (int, error) {
 		klog.V(3).InfoS("No expired ReqID records to clean",
 			"totalRecords", len(consumedReqIDs),
 			"ttl", ConsumedReqIDTTL)
-		return 0, nil
+		return 0
 	}
 
 	for _, reqID := range expiredKeys {
@@ -886,12 +899,7 @@ func CleanExpiredConsumedReqIDs() (int, error) {
 		"remainingCount", len(consumedReqIDs),
 		"ttl", ConsumedReqIDTTL)
 
-	if err := SaveConsumedReqIDsToFile(); err != nil {
-		klog.ErrorS(err, "Failed to persist ReqIDs after cleanup")
-		return cleanedCount, err
-	}
-
-	return cleanedCount, nil
+	return cleanedCount
 }
 
 // StartConsumedReqIDCleanup starts a background goroutine for periodic cleanup of expired ReqIDs
