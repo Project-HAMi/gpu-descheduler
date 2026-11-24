@@ -35,7 +35,7 @@ See [build-image.sh](build-image.sh) for details.
 ### Deployment with helm install
 
 ```bash
-helm install gpu-descheduler . --namespace kube-system --create-namespace --debug
+helm install gpu-descheduler ./chart --namespace kube-system --create-namespace --debug
 ```
 
 **Parameter Reference:**
@@ -44,14 +44,12 @@ helm install gpu-descheduler . --namespace kube-system --create-namespace --debu
 | `--namespace` | Target deployment namespace |
 | `--create-namespace` | Auto-create namespace if it doesn't exist |
 | `--debug` | Show detailed debug information |
-| `--timeout 5m` | Set timeout to 5 minutes |
-| `-f values.yaml` | Use custom values file (optional) |
 
 
 ## Verifying the Deployment
 
 ```bash
-kubectl get pods -n kube-system -l app.kubernetes/name=gpu-descheduler-webhook -w
+kubectl get pods -n kube-system -l app=gpu-descheduler-webhook -w
 
 # Expected output:
 NAME                                      READY   STATUS    RESTARTS   AGE
@@ -61,7 +59,7 @@ gpu-descheduler-webhook-5f7d9c6b4d-def34  1/1     Running   0          60s
 
 ## Viewing Status with Curl
 
-The webhook service provides **two core REST API endpoints**, listening on port **8083** inside the container:
+The webhook service provides **two core REST API endpoints**, listening on port **8083** inside the container (the webhook itself listens on 8443, metrics on 8080 and health probes on 8081):
 
 | Endpoint | Purpose | Returned Information |
 |----------|---------|---------------------|
