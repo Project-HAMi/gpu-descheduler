@@ -1123,20 +1123,37 @@ func GetGlobalCache() *PlacementCache {
 // PeekPlacementForPod returns the first eligible placement without consuming it.
 func PeekPlacementForPod(pod *corev1.Pod) (*placementv1.HamiPodPlacement, bool) {
 	matched := GetGlobalCache().FindMatchingPlacements(pod.Namespace, pod.Labels)
-	if len(matched) == 0 || IsReqIDConsumed(matched[0].Spec.ReqID) {
+	if len(matched) == 0 {
+		klog.V(4).InfoS("No matching placement found for pod", "namespace", pod.Namespace, "podName", pod.Name, "podLabels", pod.Labels)
 		return nil, false
 	}
-	return matched[0], true
+	pl := matched[0]
+	klog.V(4).InfoS("Checking first placement for ReqID idempotency", "name", pl.Name, "reqID", pl.Spec.ReqID)
+	if info, consumed := GetReqIDConsumptionInfo(pl.Spec.ReqID); consumed {
+		klog.V(2).InfoS("First placement already consumed (idempotency enforcement)",
+			"name", pl.Name, "reqID", pl.Spec.ReqID, "consumedBy", info.PodNamespace+"/"+info.PodName,
+			"consumedAt", info.ConsumedAt, "currentPhase", info.Phase)
+		return nil, false
+	}
+	return pl, true
 }
 
-// FindPlacementForPod consumes a matching placement and starts observing its Pod.
+// FindPlacementForPod is the webhook entry point for consuming a placement.
+// It returns the first matching placement and true if its ReqID is
+// available. A successful match moves the placement from the active cache to
+// the observation cache for Pod status tracking and marks the ReqID consumed
+// to prevent reuse. Dry-run requests use PeekPlacementForPod instead.
 func FindPlacementForPod(pod *corev1.Pod) (*placementv1.HamiPodPlacement, bool) {
 	pl, found := PeekPlacementForPod(pod)
 	if !found {
 		return nil, false
 	}
-	klog.InfoS("Consuming placement", "placement", pl.Namespace+"/"+pl.Name,
-		"pod", pod.Namespace+"/"+pod.Name, "reqID", pl.Spec.ReqID)
+	klog.InfoS("[PLACEMENT_CONSUMED] Found and consuming placement (single-use guarantee)",
+		"placement", pl.Namespace+"/"+pl.Name, "pod", pod.Namespace+"/"+pod.Name,
+		"reqID", pl.Spec.ReqID, "nodeName", pl.Spec.NodeName, "gpuDevices", pl.Spec.GPUDevices,
+		"action", "Removing from active cache to prevent reuse")
+	klog.V(3).InfoS("Moving placement from active cache to observation cache (ensuring idempotency)",
+		"placement", pl.Namespace+"/"+pl.Name, "pod", pod.Namespace+"/"+pod.Name, "reqID", pl.Spec.ReqID)
 	GetGlobalCache().Delete(pl.Namespace, pl.Name)
 	GetGlobalObservationCache().Add(pl, pod.Namespace, pod.Name)
 	MarkReqIDConsumed(pl.Spec.ReqID, pl.Namespace, pl.Name, pod.Namespace, pod.Name, "Observing")
