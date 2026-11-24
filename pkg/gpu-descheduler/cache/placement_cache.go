@@ -484,6 +484,14 @@ func (oc *ObservationCache) persistFailure(key string, obs *ObservedPodPlacement
 	delete(oc.observations, key)
 }
 
+// podLocation describes where a Pod runs; a freshly created Pod has no node yet.
+func podLocation(pod *corev1.Pod) string {
+	if pod.Spec.NodeName == "" {
+		return "before scheduling"
+	}
+	return "on node " + pod.Spec.NodeName
+}
+
 // checkPodStatus checks the running status of Pods in all observation records
 func (oc *ObservationCache) checkPodStatus(maxRetries int, statusUpdater StatusUpdaterFn) {
 	if oc.client == nil {
@@ -616,8 +624,8 @@ func (oc *ObservationCache) checkPodStatus(maxRetries int, statusUpdater StatusU
 						matchedPlacementNS,
 						matchedPlacementName,
 						"Matched",
-						fmt.Sprintf("Pod %s (UID: %s) detected on node %s with phase %s [verified via admission-uid: %s]",
-							pod.Name, pod.UID, pod.Spec.NodeName, pod.Status.Phase, admissionUIDFromAnnotation),
+						fmt.Sprintf("Pod %s (UID: %s) detected %s with phase %s [verified via admission-uid: %s]",
+							pod.Name, pod.UID, podLocation(pod), pod.Status.Phase, admissionUIDFromAnnotation),
 						matchedPod,
 					); err != nil {
 						klog.ErrorS(err, "Failed to update placement status (admission-uid verified)",
