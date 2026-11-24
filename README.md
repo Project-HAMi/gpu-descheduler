@@ -20,7 +20,11 @@
 | Helm | v3.8+ |
 
 
-## Build 
+## Documentation
+
+- 📘 [中文](README_CN.md)
+
+## Build
 
 The project provides an automated build script. **Using the script is recommended** over manual `docker build`:
 
