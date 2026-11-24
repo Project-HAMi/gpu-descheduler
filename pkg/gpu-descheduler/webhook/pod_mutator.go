@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -22,6 +23,9 @@ import (
 )
 
 // +kubebuilder:webhook:path=/mutate,mutating=true,failurePolicy=fail,sideEffects=NoneOnDryRun,groups="",resources=pods,verbs=create,versions=v1,name=gpu-descheduler.k8s.io,admissionReviewVersions=v1
+
+// admitMu serializes placement lookup and consumption across admission requests.
+var admitMu sync.Mutex
 
 // PodMutator implements the admission.Handler interface
 type PodMutator struct {
@@ -68,11 +72,13 @@ func (m *PodMutator) Handle(ctx context.Context, req admission.Request) admissio
 		"schedulerName", pod.Spec.SchedulerName)
 
 	dryRun := req.DryRun != nil && *req.DryRun
-	findPlacement := cache.FindPlacementForPod
-	if dryRun {
-		findPlacement = cache.PeekPlacementForPod
-	}
-	cachedPlacement, found := findPlacement(pod)
+
+	// Peek first and consume only after the target GPUs resolve, so a request
+	// that is rejected does not use up the placement. The lock keeps two
+	// concurrent requests from consuming the same placement in between.
+	admitMu.Lock()
+	defer admitMu.Unlock()
+	cachedPlacement, found := cache.PeekPlacementForPod(pod)
 
 	klog.InfoS("[CACHE_LOOKUP] Cache lookup result (authoritative source)",
 		"namespace", pod.Namespace,
@@ -125,10 +131,6 @@ func (m *PodMutator) Handle(ctx context.Context, req admission.Request) admissio
 	admissionUID := string(req.UID)
 
 	annotations[cache.GetAdmissionAnnotationKey()] = admissionUID
-
-	if !dryRun {
-		cache.RecordPendingAdmission(admissionUID, placement, pod.Namespace, pod.Name)
-	}
 
 	klog.InfoS("[ADMISSION_UID_INJECTED] Added admission UID to patch",
 		"admissionUID", admissionUID,
@@ -187,6 +189,16 @@ func (m *PodMutator) Handle(ctx context.Context, req admission.Request) admissio
 				"podName", pod.Name,
 				"targetNode", nodeName)
 		}
+	}
+
+	if !dryRun {
+		consumed, ok := cache.FindPlacementForPod(pod)
+		if !ok || consumed.Namespace != placement.Namespace || consumed.Name != placement.Name {
+			klog.ErrorS(nil, "Placement changed while admitting the Pod, not patching",
+				"namespace", pod.Namespace, "podName", pod.Name, "placement", placement.Name)
+			return admission.Allowed("placement changed during admission")
+		}
+		cache.RecordPendingAdmission(admissionUID, placement, pod.Namespace, pod.Name)
 	}
 
 	klog.InfoS("[ANNOTATIONS_READY] Annotations ready to inject",

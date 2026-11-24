@@ -62,43 +62,41 @@ func (r *PlacementReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				"currentPhase", pl.Status.Phase,
 				"consumedPhase", consumedInfo.Phase)
 
-			cachedPl, foundInCache := r.Cache.Get(pl.Namespace, pl.Name)
-			if foundInCache {
-				isDrifted := !isSpecEqual(&pl, cachedPl)
-				if isDrifted {
-					klog.ErrorS(nil, "Configuration drift detected! Attempting to modify already-consumed placement",
-						"reqID", pl.Spec.ReqID,
-						"placement", pl.Namespace+"/"+pl.Name,
-						"consumedBy", consumedInfo.PodNamespace+"/"+consumedInfo.PodName,
-						"action", "Rejecting modification and marking as Failed")
+			// The webhook drops a placement from the cache when it is consumed,
+			// so compare the generation recorded at that point instead.
+			if consumedInfo.Generation != 0 && pl.Generation != consumedInfo.Generation && pl.Status.Phase != "Failed" {
+				klog.ErrorS(nil, "Configuration drift detected! Attempting to modify already-consumed placement",
+					"reqID", pl.Spec.ReqID,
+					"placement", pl.Namespace+"/"+pl.Name,
+					"consumedBy", consumedInfo.PodNamespace+"/"+consumedInfo.PodName,
+					"action", "Rejecting modification and marking as Failed")
 
-					pl.Status.Phase = "Failed"
-					pl.Status.Message = fmt.Sprintf(
-						"Configuration modification rejected: ReqID %s was already consumed by Pod %s/%s at %v. "+
-							"To apply new configuration, create a new HamiPodPlacement with a different ReqID.",
-						pl.Spec.ReqID,
-						consumedInfo.PodNamespace,
-						consumedInfo.PodName,
-						consumedInfo.ConsumedAt.Format(time.RFC3339),
-					)
+				pl.Status.Phase = "Failed"
+				pl.Status.Message = fmt.Sprintf(
+					"Configuration modification rejected: ReqID %s was already consumed by Pod %s/%s at %v. "+
+						"To apply new configuration, create a new HamiPodPlacement with a different ReqID.",
+					pl.Spec.ReqID,
+					consumedInfo.PodNamespace,
+					consumedInfo.PodName,
+					consumedInfo.ConsumedAt.Format(time.RFC3339),
+				)
 
-					if err := r.Status().Update(ctx, &pl); err != nil {
-						klog.ErrorS(err, "Failed to update placement status after config drift detection",
-							"name", req.Name)
-						return ctrl.Result{}, err
-					}
-
-					cache.MarkReqIDConsumed(
-						pl.Spec.ReqID,
-						pl.Namespace,
-						pl.Name,
-						consumedInfo.PodNamespace,
-						consumedInfo.PodName,
-						"Failed",
-					)
-
-					return ctrl.Result{}, nil
+				if err := r.Status().Update(ctx, &pl); err != nil {
+					klog.ErrorS(err, "Failed to update placement status after config drift detection",
+						"name", req.Name)
+					return ctrl.Result{}, err
 				}
+
+				cache.MarkReqIDConsumed(
+					pl.Spec.ReqID,
+					pl.Namespace,
+					pl.Name,
+					consumedInfo.PodNamespace,
+					consumedInfo.PodName,
+					"Failed",
+				)
+
+				return ctrl.Result{}, nil
 			}
 
 			if consumedInfo.Phase == "Observing" {
@@ -320,47 +318,6 @@ func (r *PlacementReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	return ctrl.Result{}, nil
-}
-
-// isSpecEqual compares whether two Placement Specs are completely identical
-func isSpecEqual(a, b *placementv1.HamiPodPlacement) bool {
-	if a.Spec.ReqID != b.Spec.ReqID {
-		return false
-	}
-	if a.Spec.NodeName != b.Spec.NodeName {
-		return false
-	}
-	if a.Spec.EvictPod != b.Spec.EvictPod {
-		return false
-	}
-	if len(a.Spec.GPUDevices) != len(b.Spec.GPUDevices) {
-		return false
-	}
-	for i := range a.Spec.GPUDevices {
-		if a.Spec.GPUDevices[i] != b.Spec.GPUDevices[i] {
-			return false
-		}
-	}
-	return labelSelectorEqual(&a.Spec.PodSelector, &b.Spec.PodSelector)
-}
-
-// labelSelectorEqual compares whether two LabelSelectors are identical
-func labelSelectorEqual(a, b *metav1.LabelSelector) bool {
-	if a.MatchLabels == nil && b.MatchLabels == nil {
-		return true
-	}
-	if a.MatchLabels == nil || b.MatchLabels == nil {
-		return false
-	}
-	if len(a.MatchLabels) != len(b.MatchLabels) {
-		return false
-	}
-	for k, v := range a.MatchLabels {
-		if b.MatchLabels[k] != v {
-			return false
-		}
-	}
-	return true
 }
 
 // checkTargetCapacity verifies the placement's target GPUs exist and can hold the

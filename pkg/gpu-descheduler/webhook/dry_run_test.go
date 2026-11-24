@@ -57,3 +57,33 @@ func TestDryRunLeavesPlacementForRealCreate(t *testing.T) {
 		t.Fatalf("real CREATE did not consume and patch placement: %+v", result)
 	}
 }
+
+func TestRejectedPodDoesNotConsumePlacement(t *testing.T) {
+	active := cache.InitGlobalCache()
+	observations := cache.InitGlobalObservationCache(nil)
+	pl := &placementv1.HamiPodPlacement{ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "missing-gpu"}}
+	pl.Spec.ReqID = pl.Name
+	pl.Spec.NodeName = "k8s-gpu-3080x2"
+	pl.Spec.GPUDevices = []string{"gpu-7"}
+	active.AddOrUpdate(pl)
+	t.Cleanup(func() {
+		active.Delete(pl.Namespace, pl.Name)
+		observations.Remove(pl.Namespace, pl.Name)
+		cache.UnmarkReqIDConsumed(pl.Spec.ReqID)
+		cache.ConsumeAdmissionMapping("rejected")
+	})
+	req := admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{
+		UID: "rejected", Operation: admissionv1.Create,
+		Object: runtime.RawExtension{Raw: []byte(`{"apiVersion":"v1","kind":"Pod","metadata":{"name":"worker","namespace":"default"},"spec":{"schedulerName":"hami-scheduler"}}`)},
+	}}
+	m := PodMutator{Decoder: admission.NewDecoder(scheme.Scheme), ClusterState: clusterstate.NewFakeClusterState()}
+	if resp := m.Handle(t.Context(), req); resp.Allowed {
+		t.Fatalf("Pod with an unknown target GPU was allowed: %+v", resp)
+	}
+	if _, ok := active.Get(pl.Namespace, pl.Name); !ok || cache.IsReqIDConsumed(pl.Spec.ReqID) {
+		t.Fatal("rejected Pod consumed the placement")
+	}
+	if _, ok := cache.FindPlacementByAdmissionUID("rejected"); ok {
+		t.Fatal("rejected Pod recorded an admission UID")
+	}
+}

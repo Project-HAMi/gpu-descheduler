@@ -24,6 +24,19 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      initContainers:
+        # The hostPath directory is created as root, but the webhook runs as
+        # the non-root user hami and must write its consumed ReqID state there.
+        - name: persistence-dir
+          image: {{ include "gpu-descheduler-webhook.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
+          command: ["chown", "hami:hami", "/etc/crdplacement"]
+          securityContext:
+            runAsUser: 0
+            runAsNonRoot: false
+          volumeMounts:
+            - name: crdplacement
+              mountPath: /etc/crdplacement
       containers:
         - name: webhook
           image: {{ include "gpu-descheduler-webhook.image" . | quote }}

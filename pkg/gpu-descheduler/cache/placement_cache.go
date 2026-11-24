@@ -767,6 +767,9 @@ type ConsumedReqInfo struct {
 	PodName       string
 	ConsumedAt    time.Time
 	Phase         string // "Observing", "Completed", "Failed"
+	// Generation is the placement's metadata.generation when it was consumed.
+	// Zero means unknown, for example state loaded from an older file.
+	Generation int64
 }
 
 // IsReqIDConsumed checks if the ReqID has been consumed
@@ -803,7 +806,7 @@ func MarkReqIDConsumed(reqID, placementNS, placementName, podNS, podName, phase 
 		existing.Phase = phase
 		existing.PodNamespace = podNS
 		existing.PodName = podName
-		existing.ConsumedAt = now
+		consumedReqIDs[reqID] = existing
 	} else {
 		consumedReqIDs[reqID] = ConsumedReqInfo{
 			ReqID:         reqID,
@@ -1170,7 +1173,18 @@ func FindPlacementForPod(pod *corev1.Pod) (*placementv1.HamiPodPlacement, bool) 
 	GetGlobalCache().Delete(pl.Namespace, pl.Name)
 	GetGlobalObservationCache().Add(pl, pod.Namespace, pod.Name)
 	MarkReqIDConsumed(pl.Spec.ReqID, pl.Namespace, pl.Name, pod.Namespace, pod.Name, "Observing")
+	setConsumedGeneration(pl.Spec.ReqID, pl.Generation)
 	return pl, true
+}
+
+// setConsumedGeneration records the placement generation a ReqID was consumed at.
+func setConsumedGeneration(reqID string, generation int64) {
+	consumedReqMu.Lock()
+	defer consumedReqMu.Unlock()
+	if info, ok := consumedReqIDs[reqID]; ok {
+		info.Generation = generation
+		consumedReqIDs[reqID] = info
+	}
 }
 
 // FindFirstPlacementForPod finds the first matching deployment instruction (shortcut method)
