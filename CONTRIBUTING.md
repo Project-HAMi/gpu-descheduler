@@ -19,6 +19,7 @@ go test ./... -race -count=1
 golangci-lint run
 go mod tidy && git diff --exit-code go.mod go.sum
 helm lint chart
+helm unittest chart   # plugin: https://github.com/helm-unittest/helm-unittest
 ```
 
 To fuzz a parser, for example the HAMi metrics parser:

@@ -20,6 +20,9 @@ spec:
         {{- end }}
     spec:
       serviceAccountName: {{ include "gpu-descheduler-webhook.fullname" . }}
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -34,6 +37,11 @@ spec:
           securityContext:
             runAsUser: 0
             runAsNonRoot: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+              add: ["CHOWN"]
           volumeMounts:
             - name: crdplacement
               mountPath: /etc/crdplacement
@@ -41,6 +49,11 @@ spec:
         - name: webhook
           image: {{ include "gpu-descheduler-webhook.image" . | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           {{- if .Values.args }}
           args: {{- toYaml .Values.args | nindent 12 }}
           {{- else }}

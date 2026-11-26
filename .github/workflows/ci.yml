@@ -138,6 +138,12 @@ jobs:
       - name: Render chart
         run: helm template gpu-descheduler chart > /dev/null
 
+      - name: Install helm-unittest
+        run: helm plugin install https://github.com/helm-unittest/helm-unittest.git --version v1.2.1 --verify=false
+
+      - name: Unit test chart
+        run: helm unittest chart
+
       # The default image and the install command in the READMEs follow the
       # chart appVersion, so a release cannot leave them on an older version.
       - name: Check versions
