@@ -37,7 +37,7 @@ To build the image, run `./build-image.sh`. See the [README](README.md) for depl
 3. Add a test that fails without your change.
 4. Open a pull request against `main`. Say what changed and why in a sentence, add a `/kind` line such as `/kind bug`, and link the issue with `Fixes #<number>`.
 
-CI runs the checks from "Build and test", plus govulncheck, CodeQL, a short fuzz run, an image build and DCO. All must pass before merge.
+CI runs the checks from "Build and test", plus govulncheck, CodeQL, a short fuzz run, an image build with a vulnerability scan, and DCO. All must pass before merge.
 
 If your change touches GPU allocation, test it on a real GPU. Say which GPU and driver you used.
 

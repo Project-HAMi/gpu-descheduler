@@ -45,7 +45,7 @@ RUN GO_VERSION=$(go version | awk '{print $3}') && \
 # Stage 2: runtime image
 # ============================================
 # distroless static: no shell or package manager, runs as uid 65532
-FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
+FROM gcr.io/distroless/static-debian13:nonroot@sha256:8ce6dd87e9823c5b48dcfb2c8604714ccb351ce59607327bcc4957448da279b5
 
 COPY --from=builder /build/webhook-gpu-descheduler /webhook-gpu-descheduler
 

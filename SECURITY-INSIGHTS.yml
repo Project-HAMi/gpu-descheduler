@@ -117,6 +117,19 @@ repository:
         results: {}
         comment: |
           Scans Go code and workflows on every pull request and weekly.
+      - name: Trivy
+        type: SCA
+        version: v0.74.0
+        rulesets:
+          - built-in
+        integration:
+          adhoc: false
+          ci: true
+          release: false
+        results: {}
+        comment: |
+          Scans the image built for every pull request and fails on any
+          vulnerability that has a fix, whatever its severity.
       - name: Go fuzzing
         type: fuzzing
         version: latest
