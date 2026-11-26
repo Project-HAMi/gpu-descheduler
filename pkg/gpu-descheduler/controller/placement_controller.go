@@ -239,6 +239,12 @@ func (r *PlacementReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 	}
 
+	// A failed eviction, for example one a PodDisruptionBudget refused, is
+	// final: retrying it on every reconcile would loop.
+	if pl.Spec.EvictPod != "" && pl.Status.Phase == "Failed" {
+		return ctrl.Result{}, nil
+	}
+
 	// If evictPod is configured and eviction hasn't started, execute eviction
 	if pl.Spec.EvictPod != "" {
 		klog.InfoS("🎯 [EVICT_POD] Detected evictPod configuration, preparing to evict old Pod",
@@ -477,6 +483,12 @@ func (r *PlacementReconciler) findPlacementsForPod(ctx context.Context, obj clie
 	if pod.Name == "" {
 		klog.V(4).InfoS("[POD_WATCH] Pod has empty name, skipping",
 			"namespace", pod.Namespace)
+		return nil
+	}
+
+	// The evicted Pod still matches the selector while it terminates, and
+	// it must not be taken for its replacement.
+	if pod.DeletionTimestamp != nil {
 		return nil
 	}
 

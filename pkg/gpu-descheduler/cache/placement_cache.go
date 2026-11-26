@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -125,6 +126,15 @@ func (pc *PlacementCache) FindMatchingPlacements(namespace string, podLabels map
 		}
 	}
 
+	// Callers take the first match, so the oldest placement wins instead of
+	// whatever the map iteration returns first.
+	sort.Slice(matched, func(i, j int) bool {
+		ti, tj := matched[i].CreationTimestamp, matched[j].CreationTimestamp
+		if !ti.Equal(&tj) {
+			return ti.Before(&tj)
+		}
+		return matched[i].Name < matched[j].Name
+	})
 	return matched
 }
 
