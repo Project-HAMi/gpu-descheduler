@@ -94,8 +94,13 @@ jobs:
         run: |
           FULL_TAG="${GITHUB_REF#refs/tags/}"    # v1.0.0
           REPO="docker.io/projecthami/gpu-descheduler-webhook"
-          echo "repo=${REPO}" >> "$GITHUB_OUTPUT"
-          echo "tags=${REPO}:${FULL_TAG},${REPO}:latest" >> "$GITHUB_OUTPUT"
+          {
+            echo "repo=${REPO}"
+            echo "tags=${REPO}:${FULL_TAG},${REPO}:latest"
+            echo "version=${FULL_TAG}"
+            echo "revision=${GITHUB_SHA::7}"
+            echo "build_date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Log in to Docker Hub
         uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
@@ -112,6 +117,11 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
+          # Without these the binary reports version dev.
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
+            REVISION=${{ steps.meta.outputs.revision }}
+            BUILD_DATE=${{ steps.meta.outputs.build_date }}
           sbom: true
           provenance: mode=max
 
