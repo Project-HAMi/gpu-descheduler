@@ -13,7 +13,8 @@ namespace: ""
 image:
   registry: docker.io
   repository: projecthami/gpu-descheduler-webhook
-  tag: v0.0.2
+  # Empty uses the chart appVersion.
+  tag: ""
   pullPolicy: IfNotPresent
 
 # If Harbor requires auth, uncomment and configure:

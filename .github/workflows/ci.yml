@@ -138,6 +138,17 @@ jobs:
       - name: Render chart
         run: helm template gpu-descheduler chart > /dev/null
 
+      # The default image and the install command in the READMEs follow the
+      # chart appVersion, so a release cannot leave them on an older version.
+      - name: Check versions
+        run: |
+          version=$(sed -n 's/^appVersion: "\(.*\)"$/\1/p' chart/Chart.yaml)
+          test -n "$version"
+          helm template gpu-descheduler chart > rendered.yaml
+          grep -q "gpu-descheduler-webhook:v${version}\"" rendered.yaml
+          grep -q -- "--version ${version}-chart" README.md
+          grep -q -- "--version ${version}-chart" README_CN.md
+
   docker:
     runs-on: ubuntu-latest
     steps:
