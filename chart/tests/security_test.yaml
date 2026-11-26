@@ -10,8 +10,11 @@ tests:
     template: deployment.yaml
     asserts:
       - equal:
-          path: spec.template.spec.securityContext.seccompProfile.type
-          value: RuntimeDefault
+          path: spec.template.spec.securityContext
+          value:
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
       - equal:
           path: spec.template.spec.containers[0].securityContext
           value:
