@@ -1,0 +1,15 @@
+suite: Deployment
+templates:
+  - deployment.yaml
+tests:
+  - it: runs one replica by default
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 1
+  - it: refuses more than one replica
+    set:
+      replicaCount: 2
+    asserts:
+      - failedTemplate:
+          errorPattern: "replicaCount must be 1"
