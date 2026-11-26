@@ -253,10 +253,7 @@ func main() {
 	apiMux := http.NewServeMux()
 	RegisterAllAPIHandlers(apiMux, clusterState, placementCache)
 
-	apiServer := &http.Server{
-		Addr:    ":8083",
-		Handler: apiMux,
-	}
+	apiServer := newAPIServer(":8083", apiMux)
 
 	go func() {
 		setupLog.Info("Starting API server (cluster-info + placements)", "addr", ":8083")
