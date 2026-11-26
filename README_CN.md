@@ -13,7 +13,7 @@ descheduler 用来在 [HAMi](https://github.com/Project-HAMi/HAMi) 集群里迁�
 | 组件 | 版本 |
 |------|------|
 | HAMi | v2.10.0 及以上。已在 v2.10.0 和 v2.11.0 上测试。 |
-| Kubernetes | v1.24 及以上。已在 v1.24 和 v1.36 上测试。 |
+| Kubernetes | v1.24 及以上。v0.0.3 已在 v1.33 上测试，之前的版本已在 v1.24 和 v1.36 上测试。 |
 | Helm | v3.8 及以上 |
 
 ## 安装
@@ -25,7 +25,7 @@ helm install gpu-descheduler oci://docker.io/projecthami/gpu-descheduler-webhook
   --version 0.0.3-chart --namespace kube-system
 ```
 
-chart 和镜像放在 Docker Hub 的同一个仓库，标签是 `<版本>-chart`。v0.0.2 之后的镜像用 cosign 签名，并附带 SBOM。之后的版本还会把 chart 包和它的 cosign bundle 附在 GitHub release 上。验证方法：
+chart 和镜像放在 Docker Hub 的同一个仓库，标签是 `<版本>-chart`。从 v0.0.3 开始，镜像用 cosign 签名并附带 SBOM，每个 GitHub release 都附有 chart 包和它的 cosign bundle。验证方法：
 
 ```bash
 ID='^https://github.com/Project-HAMi/gpu-descheduler/\.github/workflows/release\.yml@refs/tags/v'

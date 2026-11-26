@@ -13,7 +13,7 @@ The descheduler moves GPU Pods on [HAMi](https://github.com/Project-HAMi/HAMi) c
 | Component | Version |
 |-----------|---------|
 | HAMi | v2.10.0 or later. Tested with v2.10.0 and v2.11.0. |
-| Kubernetes | v1.24 or later. Tested with v1.24 and v1.36. |
+| Kubernetes | v1.24 or later. v0.0.3 is tested with v1.33, earlier releases with v1.24 and v1.36. |
 | Helm | v3.8 or later |
 
 ## Install
@@ -25,7 +25,7 @@ helm install gpu-descheduler oci://docker.io/projecthami/gpu-descheduler-webhook
   --version 0.0.3-chart --namespace kube-system
 ```
 
-The chart lives next to the image on Docker Hub, tagged `<version>-chart`. Images after v0.0.2 are signed with cosign and ship an SBOM. Later releases also attach the chart package and its cosign bundle to the GitHub release. To verify them:
+The chart lives next to the image on Docker Hub, tagged `<version>-chart`. Since v0.0.3, images are signed with cosign and ship an SBOM, and each GitHub release carries the chart package and its cosign bundle. To verify them:
 
 ```bash
 ID='^https://github.com/Project-HAMi/gpu-descheduler/\.github/workflows/release\.yml@refs/tags/v'
