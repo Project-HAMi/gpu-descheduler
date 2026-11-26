@@ -11,10 +11,10 @@ rules:
 - apiGroups: ["scheduling.hami.placement.com"]
   resources: ["hamipodplacements/status"]
   verbs: ["get","update","patch"]
-# Pod query and delete
+# Pod query
 - apiGroups: [""]
   resources: ["pods"]
-  verbs: ["get","list","watch","delete"]
+  verbs: ["get","list","watch"]
 # Pod Eviction permission - critical for handleEvictPod
 # Note: Eviction is a subresource of Pod, in the core API group ("") not the policy group
 - apiGroups: [""]

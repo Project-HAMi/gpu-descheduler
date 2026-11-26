@@ -70,13 +70,9 @@ patch:
   image:
     registry: "docker.io"
     repository: "liangjw/kube-webhook-certgen"
-    tag: "v1.1.1"
-    pullPolicy: IfNotPresent
-    pullSecrets: []
-  imageNew:
-    registry: "docker.io"
-    repository: "liangjw/kube-webhook-certgen"
-    tag: "v1.1.1"
+    # The digest is the one of registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.1.1,
+    # which this mirror matches, so a changed tag on the mirror cannot swap the image.
+    tag: "v1.1.1@sha256:64d8c73dca984af206adf9d6d7e46aa550362b1d7a01f3a0a91b20cc67868660"
     pullPolicy: IfNotPresent
     pullSecrets: []
   priorityClassName: ""

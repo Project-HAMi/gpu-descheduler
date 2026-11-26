@@ -1,0 +1,106 @@
+suite: Security settings
+templates:
+  - deployment.yaml
+  - job-createSecret.yaml
+  - job-patch-ca-bundle.yaml
+  - job-rbac.yaml
+  - rbac/clusterrole.yaml
+tests:
+  - it: hardens the webhook Pod
+    template: deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.seccompProfile.type
+          value: RuntimeDefault
+      - equal:
+          path: spec.template.spec.containers[0].securityContext
+          value:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext
+          value:
+            runAsUser: 0
+            runAsNonRoot: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+              add: ["CHOWN"]
+
+  - it: runs the certgen Jobs hardened, pinned by digest, as the hook service account
+    templates:
+      - job-createSecret.yaml
+      - job-patch-ca-bundle.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: gpu-descheduler-webhook-admission
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: docker.io/liangjw/kube-webhook-certgen:v1.1.1@sha256:64d8c73dca984af206adf9d6d7e46aa550362b1d7a01f3a0a91b20cc67868660
+      - equal:
+          path: spec.template.spec.securityContext.seccompProfile.type
+          value: RuntimeDefault
+      - equal:
+          path: spec.template.spec.containers[0].securityContext
+          value:
+            runAsUser: 2000
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+
+  - it: keeps the digest when patch.image is not set
+    template: job-createSecret.yaml
+    set:
+      patch.image: null
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: docker.io/liangjw/kube-webhook-certgen:v1.1.1@sha256:64d8c73dca984af206adf9d6d7e46aa550362b1d7a01f3a0a91b20cc67868660
+
+  - it: binds the hook RBAC only to the hook service account
+    template: job-rbac.yaml
+    documentSelector:
+      path: kind
+      value: RoleBinding
+      matchMany: true
+    asserts:
+      - equal:
+          path: subjects[0].name
+          value: gpu-descheduler-webhook-admission
+
+  - it: binds the hook ClusterRole only to the hook service account
+    template: job-rbac.yaml
+    documentSelector:
+      path: kind
+      value: ClusterRoleBinding
+    asserts:
+      - equal:
+          path: subjects[0].name
+          value: gpu-descheduler-webhook-admission
+
+  - it: deletes the secret write access once the hook has run
+    template: job-rbac.yaml
+    documentSelector:
+      path: metadata.name
+      value: gpu-descheduler-webhook-create-job
+      matchMany: true
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/hook-delete-policy"]
+          value: before-hook-creation,hook-succeeded
+
+  - it: does not let the webhook delete Pods
+    template: rbac/clusterrole.yaml
+    asserts:
+      - equal:
+          path: rules[2].resources
+          value: ["pods"]
+      - equal:
+          path: rules[2].verbs
+          value: ["get", "list", "watch"]
