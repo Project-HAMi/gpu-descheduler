@@ -1,8 +1,8 @@
 # HAMi GPU Descheduler
 
-[![CI](https://img.shields.io/github/actions/workflow/status/Project-HAMi/gpu-descheduler/ci.yml?branch=main&label=CI)](https://github.com/Project-HAMi/gpu-descheduler/actions/workflows/ci.yml)
-[![OpenSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/Project-HAMi/gpu-descheduler?label=OpenSSF%20Scorecard)](https://scorecard.dev/viewer/?uri=github.com/Project-HAMi/gpu-descheduler)
-[![License](https://img.shields.io/github/license/Project-HAMi/gpu-descheduler)](LICENSE)
+[![CI](https://github.com/Project-HAMi/gpu-descheduler/actions/workflows/ci.yml/badge.svg)](https://github.com/Project-HAMi/gpu-descheduler/actions/workflows/ci.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Project-HAMi/gpu-descheduler/badge)](https://scorecard.dev/viewer/?uri=github.com/Project-HAMi/gpu-descheduler)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
 [English](README.md) | 中文
 
