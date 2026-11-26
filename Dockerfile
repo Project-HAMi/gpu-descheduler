@@ -30,11 +30,9 @@ ARG VERSION=dev
 ARG REVISION=none
 ARG BUILD_DATE=
 
-# Build the binary
-# CGO_ENABLED=1: HAMi/NVML requires CGO
-# TARGETOS/TARGETARCH are injected by buildx, each platform builds with native gcc
+# Build a static binary; nothing here needs cgo
 RUN GO_VERSION=$(go version | awk '{print $3}') && \
-    CGO_ENABLED=1 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
+    CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
     -ldflags="-s -w \
     -X main.Version=${VERSION} \
     -X main.BuildTime=${BUILD_DATE} \
@@ -46,51 +44,16 @@ RUN GO_VERSION=$(go version | awk '{print $3}') && \
 # ============================================
 # Stage 2: runtime image
 # ============================================
-FROM debian:bookworm-slim@sha256:e67eeead736ff7bbe258ef088bff683635c561b1fcfefad0806c1df4ab49ce0e
+# distroless static: no shell or package manager, runs as uid 65532
+FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
 
-# Avoid interactive prompts
-ENV DEBIAN_FRONTEND=noninteractive
-
-# Base packages (ca-certificates for HTTPS, curl for the health check)
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        ca-certificates \
-        curl \
-    && rm -rf /var/lib/apt/lists/* && \
-    apt-get clean && \
-    rm -rf /tmp/* /var/tmp/*
-# Run as a non-root user
-RUN groupadd -r hami && useradd -r -g hami -s /sbin/nologin -M hami
-
-# Certificate directory
-RUN mkdir -p /etc/webhook/certs && \
-    chown -R hami:hami /etc/webhook/certs
-
-# Copy the binary from the build stage
 COPY --from=builder /build/webhook-gpu-descheduler /webhook-gpu-descheduler
 
-# Permissions
-RUN chmod +x /webhook-gpu-descheduler && \
-    chown hami:hami /webhook-gpu-descheduler
-
-# Switch to the non-root user
-USER hami
+USER 65532:65532
 
 # Ports: webhook, metrics, health probes
 EXPOSE 8443 8080 8081
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8081/readyz || exit 1
-
-# Environment
-ENV TLS_DIR=/etc/webhook/certs
-ENV PORT=8443
-ENV METRICS_BIND_ADDRESS=:8080
-ENV HEALTH_PROBE_BIND_ADDRESS=:8081
-
-# Entrypoint
 ENTRYPOINT ["/webhook-gpu-descheduler"]
 
-# Default arguments
 CMD ["--tls-dir=/etc/webhook/certs", "--port=8443", "--metrics-bind-address=:8080", "--scheduler-port=9395", "--sync-interval=60s", "--enable-leader-election=true"]

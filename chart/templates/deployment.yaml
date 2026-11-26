@@ -21,6 +21,7 @@ spec:
     spec:
       serviceAccountName: {{ include "gpu-descheduler-webhook.fullname" . }}
       securityContext:
+        runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
       {{- with .Values.imagePullSecrets }}
