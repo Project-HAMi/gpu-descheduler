@@ -19,16 +19,14 @@ tests:
             readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
+      - notExists:
+          path: spec.template.spec.initContainers
       - equal:
-          path: spec.template.spec.initContainers[0].securityContext
+          path: spec.template.spec.volumes
           value:
-            runAsUser: 0
-            runAsNonRoot: false
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            capabilities:
-              drop: ["ALL"]
-              add: ["CHOWN"]
+            - name: tls
+              secret:
+                secretName: gpu-descheduler-webhook-tls
 
   - it: runs the certgen Jobs hardened, pinned by digest, as the hook service account
     templates:

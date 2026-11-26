@@ -117,12 +117,6 @@ func main() {
 	placementCache := cache.InitGlobalCache()
 	setupLog.Info("Global placement cache initialized")
 
-	if err := cache.LoadConsumedReqIDsFromFile(); err != nil {
-		setupLog.Error(err, "Failed to load persisted ReqID state, idempotency may be compromised after restart")
-	} else {
-		setupLog.Info("Successfully loaded persisted ReqID state (idempotency guaranteed across restarts)")
-	}
-
 	ctx := ctrl.SetupSignalHandler()
 	cache.StartConsumedReqIDCleanup(ctx.Done())
 	setupLog.Info("Started consumed ReqID cleanup task (TTL: 24h, interval: 1h)")
