@@ -123,6 +123,15 @@ func (r *PlacementReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 				klog.V(4).InfoS("Placement is being observed, skipping validation",
 					"reqID", pl.Spec.ReqID)
+				// Record the consumption in the API, so a restart cannot
+				// offer the placement to another Pod.
+				if pl.Status.ConsumedAt == nil {
+					consumedAt := metav1.NewTime(consumedInfo.ConsumedAt)
+					pl.Status.ConsumedAt = &consumedAt
+					if err := r.Status().Update(ctx, &pl); err != nil {
+						return ctrl.Result{}, err
+					}
+				}
 				return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 			}
 
@@ -154,14 +163,22 @@ func (r *PlacementReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 	}
 
-	if cache.IsReqIDConsumed(pl.Spec.ReqID) {
-		klog.V(3).InfoS("Placement already consumed, skipping cache update",
-			"reqID", pl.Spec.ReqID,
-			"placement", pl.Namespace+"/"+pl.Name,
-			"phase", pl.Status.Phase)
-	} else {
-		r.Cache.AddOrUpdate(&pl)
+	// The in-memory record is gone after a restart or its TTL, but the status
+	// still shows the consumption. Rebuild the record instead of offering the
+	// placement again.
+	if consumedInStatus(&pl) {
+		phase := "Observing"
+		if pl.Status.Phase == "Matched" || pl.Status.Phase == "Completed" || pl.Status.Phase == "PartiallyCompleted" || pl.Status.Phase == "Failed" {
+			phase = pl.Status.Phase
+		}
+		cache.MarkReqIDConsumed(pl.Spec.ReqID, pl.Namespace, pl.Name, pl.Namespace, pl.Status.MatchedPodName, phase)
+		r.Cache.Delete(pl.Namespace, pl.Name)
+		klog.V(3).InfoS("Placement already consumed according to its status, not offering it again",
+			"reqID", pl.Spec.ReqID, "placement", pl.Namespace+"/"+pl.Name, "phase", pl.Status.Phase)
+		return ctrl.Result{}, nil
 	}
+
+	r.Cache.AddOrUpdate(&pl)
 
 	if r.ClusterState == nil || !r.ClusterState.IsReady() {
 		klog.V(3).InfoS("Cluster state not ready, skipping validation")
@@ -535,4 +552,14 @@ func printClusterStateInfo(cs *clusterstate.ClusterState) {
 	}
 
 	klog.InfoS("========== End of Cluster State Information ==========")
+}
+
+// consumedInStatus reports whether the placement's status shows that a Pod
+// already used it.
+func consumedInStatus(pl *placementv1.HamiPodPlacement) bool {
+	switch pl.Status.Phase {
+	case "Matched", "Completed", "PartiallyCompleted":
+		return true
+	}
+	return pl.Status.ConsumedAt != nil
 }

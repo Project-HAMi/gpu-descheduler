@@ -752,7 +752,7 @@ type PendingAdmissionInfo struct {
 }
 
 // ConsumedReqIDTTL defines the expiration time for ReqID records (default 24 hours)
-// Records exceeding this time will be automatically cleaned up to prevent unlimited memory and disk growth
+// Records exceeding this time will be automatically cleaned up to prevent unlimited memory growth
 const ConsumedReqIDTTL = 24 * time.Hour
 
 // cleanupInterval defines the cleanup task execution interval (default: check once per hour)
@@ -792,7 +792,8 @@ func GetReqIDConsumptionInfo(reqID string) (ConsumedReqInfo, bool) {
 	return ConsumedReqInfo{}, false
 }
 
-// MarkReqIDConsumed marks ReqID as consumed (and persists to file simultaneously)
+// MarkReqIDConsumed marks ReqID as consumed. The placement status is the
+// durable record; the controller rebuilds this one from it after a restart.
 func MarkReqIDConsumed(reqID, placementNS, placementName, podNS, podName, phase string) {
 	consumedReqMu.Lock()
 	defer consumedReqMu.Unlock()
@@ -823,13 +824,6 @@ func MarkReqIDConsumed(reqID, placementNS, placementName, podNS, podName, phase 
 			"pod", podNS+"/"+podName,
 			"phase", phase)
 	}
-
-	go func() {
-		if err := SaveConsumedReqIDsToFile(); err != nil {
-			klog.ErrorS(err, "Failed to persist consumed ReqIDs to file",
-				"reqID", reqID)
-		}
-	}()
 }
 
 // UnmarkReqIDConsumed unmarks (only used when failed and retry is needed)
@@ -844,23 +838,9 @@ func UnmarkReqIDConsumed(reqID string) {
 	}
 }
 
-// CleanExpiredConsumedReqIDs cleans up expired ReqID records
-// Deletes all records where ConsumedAt exceeds TTL to prevent unlimited memory and disk growth
-// Automatically persists to file after cleanup is complete
-func CleanExpiredConsumedReqIDs() (int, error) {
-	cleanedCount := cleanExpiredConsumedReqIDs()
-	if cleanedCount == 0 {
-		return 0, nil
-	}
-	// Save takes consumedReqMu itself, so it runs after the lock is released.
-	if err := SaveConsumedReqIDsToFile(); err != nil {
-		klog.ErrorS(err, "Failed to persist ReqIDs after cleanup")
-		return cleanedCount, err
-	}
-	return cleanedCount, nil
-}
-
-func cleanExpiredConsumedReqIDs() int {
+// CleanExpiredConsumedReqIDs deletes the records older than ConsumedReqIDTTL,
+// so memory does not grow without bound.
+func CleanExpiredConsumedReqIDs() int {
 	consumedReqMu.Lock()
 	defer consumedReqMu.Unlock()
 
@@ -919,10 +899,7 @@ func StartConsumedReqIDCleanup(stopCh <-chan struct{}) {
 				klog.InfoS("Stopping consumed ReqID cleanup goroutine")
 				return
 			case <-ticker.C:
-				cleaned, err := CleanExpiredConsumedReqIDs()
-				if err != nil {
-					klog.ErrorS(err, "Failed to cleanup expired ReqIDs")
-				} else if cleaned > 0 {
+				if cleaned := CleanExpiredConsumedReqIDs(); cleaned > 0 {
 					klog.V(1).InfoS("Periodic cleanup completed",
 						"cleaned", cleaned)
 				}
