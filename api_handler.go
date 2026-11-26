@@ -144,6 +144,15 @@ type AssignmentResponse struct {
 	GPUDevice string `json:"gpuDevice"`
 }
 
+// apiReadHeaderTimeout bounds how long the API server waits for request
+// headers, so a client that never finishes them cannot hold a connection.
+var apiReadHeaderTimeout = 5 * time.Second
+
+// newAPIServer returns the server for the read-only API on addr.
+func newAPIServer(addr string, handler http.Handler) *http.Server {
+	return &http.Server{Addr: addr, Handler: handler, ReadHeaderTimeout: apiReadHeaderTimeout}
+}
+
 func RegisterAllAPIHandlers(mux *http.ServeMux, clusterState *clusterstate.ClusterState, placementCache *cache.PlacementCache) {
 	RegisterClusterInfoHandler(mux, clusterState)
 	RegisterPlacementCacheHandler(mux, placementCache)
