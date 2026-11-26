@@ -22,7 +22,7 @@ Install a release:
 
 ```bash
 helm install gpu-descheduler oci://docker.io/projecthami/gpu-descheduler-webhook \
-  --version 0.0.2-chart --namespace kube-system
+  --version 0.0.3-chart --namespace kube-system
 ```
 
 The chart lives next to the image on Docker Hub, tagged `<version>-chart`. Images after v0.0.2 are signed with cosign and ship an SBOM. Later releases also attach the chart package and its cosign bundle to the GitHub release. To verify them:

@@ -22,7 +22,7 @@ descheduler 用来在 [HAMi](https://github.com/Project-HAMi/HAMi) 集群里迁�
 
 ```bash
 helm install gpu-descheduler oci://docker.io/projecthami/gpu-descheduler-webhook \
-  --version 0.0.2-chart --namespace kube-system
+  --version 0.0.3-chart --namespace kube-system
 ```
 
 chart 和镜像放在 Docker Hub 的同一个仓库，标签是 `<版本>-chart`。v0.0.2 之后的镜像用 cosign 签名，并附带 SBOM。之后的版本还会把 chart 包和它的 cosign bundle 附在 GitHub release 上。验证方法：

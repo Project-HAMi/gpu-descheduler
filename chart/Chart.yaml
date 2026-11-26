@@ -1,8 +1,8 @@
 apiVersion: v2
 name: gpu-descheduler-webhook
 description: HAMi GPU descheduler, a mutating webhook and controller that moves vGPU Pods to chosen nodes and GPUs
-version: 0.0.2
-appVersion: "0.0.2"
+version: 0.0.3
+appVersion: "0.0.3"
 keywords:
   - hami
   - vgpu
