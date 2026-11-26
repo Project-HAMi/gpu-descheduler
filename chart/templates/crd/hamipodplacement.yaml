@@ -79,6 +79,7 @@ spec:
                     description: "GPU device specification in format 'gpu-<index>' or 'gpu-<index>/<core-percentage>' (e.g., gpu-0, gpu-1/70)"
                 evictPod:
                   type: string
+                  description: "Pod in the same namespace to evict first. If the eviction is refused, the placement fails and the eviction is not retried"
             status:
               type: object
               properties:
@@ -98,8 +99,9 @@ spec:
                 consumedAt:
                   type: string
                   format: date-time
+                  description: "When a Pod used this placement. A placement with this field set is not offered again"
                 message:
                   type: string
                 matchedPodName:
                   type: string
-                  description: "Pod name precisely matched via Admission-UID. Populated by ObservationCache only after Pod is running successfully"
+                  description: "Name of the Pod that used this placement"

@@ -36,6 +36,8 @@ type HamiPodPlacementSpec struct {
 	// +kubebuilder:validation:MinItems=1
 	GPUDevices []string `json:"gpuDevices"`
 
+	// EvictPod is a Pod in the same namespace to evict first. If the eviction
+	// is refused, the placement fails and the eviction is not retried.
 	// +kubebuilder:validation:Optional
 	EvictPod string `json:"evictPod,omitempty"`
 }
@@ -50,9 +52,12 @@ type AssignmentDetail struct {
 type HamiPodPlacementStatus struct {
 	Phase             string             `json:"phase,omitempty"`
 	AssignmentDetails []AssignmentDetail `json:"assignmentDetails,omitempty"`
-	ConsumedAt        *metav1.Time       `json:"consumedAt,omitempty"`
-	Message           string             `json:"message,omitempty"`
-	MatchedPodName    string             `json:"matchedPodName,omitempty"`
+	// ConsumedAt is when a Pod used the placement. A placement with it set
+	// is not offered again, also after a restart.
+	ConsumedAt *metav1.Time `json:"consumedAt,omitempty"`
+	Message    string       `json:"message,omitempty"`
+	// MatchedPodName is the Pod that used the placement.
+	MatchedPodName string `json:"matchedPodName,omitempty"`
 }
 
 // +kubebuilder:object:root=true

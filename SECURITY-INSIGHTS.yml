@@ -1,7 +1,7 @@
 header:
   schema-version: 2.0.0
-  last-updated: '2026-11-24'
-  last-reviewed: '2026-11-24'
+  last-updated: '2026-11-26'
+  last-reviewed: '2026-11-26'
   url: https://github.com/Project-HAMi/gpu-descheduler/blob/main/SECURITY-INSIGHTS.yml
   comment: |
     Security metadata for gpu-descheduler, following the OpenSSF
@@ -58,11 +58,14 @@ repository:
       self:
         comment: |
           Dependabot keeps dependencies current. Every pull request runs
-          tests, lint, govulncheck, CodeQL and fuzz tests for the input
-          parsers. main needs green checks and one review. Actions are
-          pinned to commit SHAs and base images to digests. Release
-          images are signed with cosign and ship an SBOM. GitHub
-          releases carry the chart package and its cosign bundle.
+          tests, lint, govulncheck, CodeQL, fuzz tests for the input
+          parsers and chart unit tests. main needs green checks and one
+          review. Actions are pinned to commit SHAs and images to
+          digests. The image is a static binary on distroless that runs
+          as a non-root user, and the chart drops all capabilities and
+          mounts the root filesystem read-only. Release images are signed
+          with cosign and ship an SBOM. GitHub releases carry the chart
+          package and its cosign bundle.
     tools:
       - name: Dependabot
         type: SCA

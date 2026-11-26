@@ -45,7 +45,7 @@ cosign verify-blob gpu-descheduler-webhook-<版本>-chart.tgz \
 helm install gpu-descheduler ./chart --namespace kube-system --create-namespace
 ```
 
-所有资源都装在 `--namespace` 指定的命名空间里。
+所有资源都装在 `--namespace` 指定的命名空间里。chart 只运行一个副本，设置更多会报错，因为 webhook 从 leader 的内存里匹配 placement。
 
 检查是否运行：
 
@@ -59,9 +59,13 @@ kubectl get pods -n kube-system -l app=gpu-descheduler-webhook
 NAMESPACE=kube-system ./chart/uninstall-gpu-descheduler.sh
 ```
 
+0.0.2 把状态存在它所在节点的 `/etc/crdplacement` 里。之后的版本把状态记在 placement 的 status 里，升级后可以删掉这个目录。
+
 ## 构建
 
 用 `./build-image.sh` 构建镜像，`./build-image.sh -h` 查看参数。编译二进制需要 `go.mod` 里的 Go 版本。
+
+镜像里只有静态二进制，基于 distroless，以 uid 65532 运行，没有 shell。
 
 ## 连接 HAMi
 
@@ -82,7 +86,7 @@ CRD 在 `chart/templates/crd/hamipodplacement.yaml`，chart 会自动安装。�
 kubectl apply -f chart/templates/crd/hamipodplacement.yaml
 ```
 
-一个 placement 只给一个 Pod 用。这个 Pod 必须使用 `schedulerName: hami-scheduler`，并匹配 `podSelector`。
+一个 placement 只给一个 Pod 用。这个 Pod 必须使用 `schedulerName: hami-scheduler`，并匹配 `podSelector`。多个 placement 匹配同一个 Pod 时，使用最早创建的那个。placement 的 status 会记录它已被使用，所以重启后也不会再给别的 Pod 用。
 
 ```yaml
 apiVersion: scheduling.hami.placement.com/v1
@@ -111,7 +115,9 @@ kubectl get hamipodplacements -A
 
 驱逐 `evictPod` 之前，控制器会检查目标 GPU。GPU 必须存在，并且放得下这个 Pod。否则 placement 失败，Pod 继续运行。
 
-释放出来的容量不会预留。新 Pod 调度之前，别的 Pod 可能先占用。见 [#10](https://github.com/Project-HAMi/gpu-descheduler/issues/10)。
+如果驱逐被拒绝，比如被 PodDisruptionBudget 拒绝，placement 失败，不会重试驱逐。
+
+释放出来的容量不会预留。新 Pod 调度之前，别的 Pod 可能先占用。见 [#10](https://github.com/Project-HAMi/gpu-descheduler/issues/10)。HAMi 调度器中的容量预留计划在 [Project-HAMi/HAMi#3541](https://github.com/Project-HAMi/HAMi/issues/3541) 中实现。
 
 ### 阶段
 
