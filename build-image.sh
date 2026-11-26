@@ -6,7 +6,7 @@
 #   ./build-image.sh [options]
 #
 # Options:
-#   -t, --tag <tag>          Image tag (default: v0.0.2)
+#   -t, --tag <tag>          Image tag (default: v<appVersion> from chart/Chart.yaml)
 #   -r, --registry <url>     Image registry URL (optional)
 #   -p, --platform <arch>    Target platform (linux/amd64, linux/arm64, or all)
 #   -v, --version <ver>      Version number (for ldflags)
@@ -28,15 +28,16 @@
 set -e
 
 # Defaults
-TAG="v0.0.2"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="${SCRIPT_DIR}"
+# The chart appVersion, which is also the image tag the chart deploys
+TAG="v$(sed -n 's/^appVersion: "\(.*\)"$/\1/p' "${SCRIPT_DIR}/chart/Chart.yaml")"
 REGISTRY=""
 PLATFORM="linux/amd64"
-VERSION="${TAG}"
+VERSION=""
 PUSH=false
 NO_CACHE=""
 DOCKERFILE="Dockerfile"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="${SCRIPT_DIR}"
 
 # Color output
 RED='\033[0;31m'
@@ -140,6 +141,9 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# The version injected into the binary defaults to the tag
+VERSION="${VERSION:-${TAG}}"
 
 # Get Git info
 if command -v git &> /dev/null && [ -d "${PROJECT_ROOT}/.git" ]; then
@@ -265,15 +269,12 @@ if [ $? -eq 0 ]; then
     fi
 
     echo ""
-    log_info "=========================================="
-    log_info "Update Helm Chart image config:"
-    log_info "=========================================="
-    echo ""
-    echo "In chart/values.yaml, modify:"
-    echo ""
-    echo "image:"
-    echo "  repository: projecthami/gpu-descheduler-webhook"
-    echo "  tag: \"${TAG}\""
+    log_info "To deploy it with the chart:"
+    REGISTRY_FLAG=""
+    if [ -n "$REGISTRY" ]; then
+        REGISTRY_FLAG=" --set image.registry=${REGISTRY%/}"
+    fi
+    echo "  helm upgrade --install gpu-descheduler ./chart -n kube-system${REGISTRY_FLAG} --set image.tag=${TAG}"
     echo ""
 else
     log_error "Image build failed!"

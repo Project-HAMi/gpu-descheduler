@@ -1131,7 +1131,8 @@ func GetGlobalCache() *PlacementCache {
 
 // ==================== Convenience Functions for Webhook ====================
 
-// PeekPlacementForPod returns the first eligible placement without consuming it.
+// PeekPlacementForPod returns the oldest matching placement if its ReqID is
+// unused, without consuming it.
 func PeekPlacementForPod(pod *corev1.Pod) (*placementv1.HamiPodPlacement, bool) {
 	matched := GetGlobalCache().FindMatchingPlacements(pod.Namespace, pod.Labels)
 	if len(matched) == 0 {
@@ -1150,7 +1151,7 @@ func PeekPlacementForPod(pod *corev1.Pod) (*placementv1.HamiPodPlacement, bool) 
 }
 
 // FindPlacementForPod is the webhook entry point for consuming a placement.
-// It returns the first matching placement and true if its ReqID is
+// It returns the oldest matching placement and true if its ReqID is
 // available. A successful match moves the placement from the active cache to
 // the observation cache for Pod status tracking and marks the ReqID consumed
 // to prevent reuse. Dry-run requests use PeekPlacementForPod instead.
@@ -1181,22 +1182,6 @@ func setConsumedGeneration(reqID string, generation int64) {
 		consumedReqIDs[reqID] = info
 	}
 }
-
-// FindFirstPlacementForPod finds the first matching deployment instruction (shortcut method)
-// Use this method when only need to get the first matching record
-//
-// Parameters:
-//   - pod: Kubernetes Pod object pointer
-//
-// Returns:
-//   - *placementv1.HamiPodPlacement: the matched unique deployment instruction (or nil)
-//   - bool: whether found
-//
-// Key features:
-//   - Singleton return: returns only one Placement each time to avoid reuse
-//   - Immediate consumption: moves from active cache to observation cache immediately after finding
-//   - Idempotency guarantee: ensures same ReqID can only be used once through ReqID consumption records
-//   - Natural deduplication: cache layer control, no need for additional status checks at Webhook layer
 
 // HasActivePlacement checks if there are active deployment instructions for the specified Pod
 // Does not return specific data, only used for quick judgment (better performance)

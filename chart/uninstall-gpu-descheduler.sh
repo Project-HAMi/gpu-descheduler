@@ -56,6 +56,19 @@ else
     echo "   ServiceAccount not found (skipped)"
 fi
 
+# Step 3c: Delete what the certificate hooks leave behind. Helm deletes them
+# after they succeed, but keeps them when a hook fails, and 0.0.2 kept the
+# create-job RBAC in any case.
+echo ""
+echo "Step 3c: Deleting leftover certificate hook objects..."
+kubectl delete -n "$NAMESPACE" --ignore-not-found \
+    job/gpu-descheduler-webhook-create-secret job/gpu-descheduler-webhook-patch \
+    serviceaccount/gpu-descheduler-webhook-admission \
+    role/gpu-descheduler-webhook-create-job rolebinding/gpu-descheduler-webhook-create-job \
+    role/gpu-descheduler-webhook-patch-job rolebinding/gpu-descheduler-webhook-patch-job
+kubectl delete --ignore-not-found \
+    clusterrole/gpu-descheduler-webhook-patch-job clusterrolebinding/gpu-descheduler-webhook-patch-job
+
 # Step 4: Delete Leader Election Lease
 echo ""
 echo "Step 4: Deleting Leader Lease..."

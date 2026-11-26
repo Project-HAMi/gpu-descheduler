@@ -45,7 +45,7 @@ Install from source:
 helm install gpu-descheduler ./chart --namespace kube-system --create-namespace
 ```
 
-Everything goes into the namespace you pass with `--namespace`.
+Everything goes into the namespace you pass with `--namespace`. The chart runs one replica and refuses more, because the webhook matches placements from the leader's memory.
 
 Check that it runs:
 
@@ -59,9 +59,13 @@ To remove it, including the CRD and the TLS Secret:
 NAMESPACE=kube-system ./chart/uninstall-gpu-descheduler.sh
 ```
 
+0.0.2 kept its state in `/etc/crdplacement` on the node it ran on. Later versions keep it in the placement status, so you can delete that directory after upgrading.
+
 ## Build
 
 Build the image with `./build-image.sh`. Run `./build-image.sh -h` for options. Building the binary needs the Go version from `go.mod`.
+
+The image holds only the static binary, on distroless, and runs as uid 65532. It has no shell.
 
 ## Connecting to HAMi
 
@@ -82,7 +86,7 @@ The CRD is in `chart/templates/crd/hamipodplacement.yaml`. The chart installs it
 kubectl apply -f chart/templates/crd/hamipodplacement.yaml
 ```
 
-A placement is used by one Pod. That Pod must use `schedulerName: hami-scheduler` and match `podSelector`.
+A placement is used by one Pod. That Pod must use `schedulerName: hami-scheduler` and match `podSelector`. When several placements match a Pod, the oldest one is used. The placement status records the use, so a restart does not offer the placement again.
 
 ```yaml
 apiVersion: scheduling.hami.placement.com/v1
@@ -111,7 +115,9 @@ More examples are in [deploy/yaml/pod-placement-demo.yaml](deploy/yaml/pod-place
 
 Before it evicts `evictPod`, the controller checks the target GPUs. They must exist and have room for the Pod. If not, the placement fails and the Pod keeps running.
 
-The freed capacity is not reserved. Another Pod can take it before the replacement is scheduled. See [#10](https://github.com/Project-HAMi/gpu-descheduler/issues/10).
+If the eviction is refused, for example by a PodDisruptionBudget, the placement fails and the eviction is not retried.
+
+The freed capacity is not reserved. Another Pod can take it before the replacement is scheduled. See [#10](https://github.com/Project-HAMi/gpu-descheduler/issues/10). A reservation in the HAMi scheduler is planned in [Project-HAMi/HAMi#3541](https://github.com/Project-HAMi/HAMi/issues/3541).
 
 ### Phases
 
