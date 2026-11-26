@@ -184,9 +184,21 @@ jobs:
           file: Dockerfile
           platforms: linux/amd64
           push: false
+          load: true
+          tags: gpu-descheduler-webhook:ci
           build-args: |
             TARGETOS=linux
             TARGETARCH=amd64
             VERSION=${{ steps.meta.outputs.version }}
             REVISION=${{ steps.meta.outputs.revision }}
             BUILD_DATE=${{ steps.meta.outputs.build_date }}
+
+      # Fail on any vulnerability that has a fix, whatever its severity:
+      # trivy rates Debian security advisories UNKNOWN, other scanners
+      # rate some of them HIGH.
+      - name: Scan image
+        run: >-
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock
+          ghcr.io/aquasecurity/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969
+          image --scanners vuln --ignore-unfixed --exit-code 1 --no-progress
+          gpu-descheduler-webhook:ci
