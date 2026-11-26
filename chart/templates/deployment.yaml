@@ -6,7 +6,10 @@ metadata:
   labels:
     {{- include "gpu-descheduler-webhook.labels" . | nindent 4 }}
 spec:
-  replicas: {{ .Values.replicaCount | default 2 }}
+  {{- if gt (int (.Values.replicaCount | default 1)) 1 }}
+  {{- fail "replicaCount must be 1: placements are matched in the leader's memory, so a second replica would admit Pods without them" }}
+  {{- end }}
+  replicas: {{ .Values.replicaCount | default 1 }}
   selector:
     matchLabels:
       {{- include "gpu-descheduler-webhook.selectorLabels" . | nindent 6 }}
