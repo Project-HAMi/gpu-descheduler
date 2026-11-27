@@ -47,6 +47,8 @@ helm install gpu-descheduler ./chart --namespace kube-system --create-namespace
 
 Everything goes into the namespace you pass with `--namespace`. The chart runs one replica and refuses more, because the webhook matches placements from the leader's memory.
 
+The webhook needs no cert-manager. The descheduler creates a CA and a certificate for its Service, keeps them in the `gpu-descheduler-webhook-cert` Secret, adds the CA to its MutatingWebhookConfiguration, and renews the certificate 90 days before it expires. To take the certificate from cert-manager instead, set `certManager.enabled=true` and `certManager.issuerName` to a ClusterIssuer.
+
 Check that it runs:
 
 ```bash
@@ -60,6 +62,8 @@ NAMESPACE=kube-system ./chart/uninstall-gpu-descheduler.sh
 ```
 
 0.0.2 kept its state in `/etc/crdplacement` on the node it ran on. Later versions keep it in the placement status, so you can delete that directory after upgrading.
+
+Up to 0.0.3, Jobs running kube-webhook-certgen wrote the certificate to the `gpu-descheduler-webhook-tls` Secret. Later versions do not use it, so you can delete it after upgrading. To go back to 0.0.3, run `helm upgrade` with `--version 0.0.3-chart` rather than `helm rollback`, which skips the Jobs that put the old CA back into the webhook configuration.
 
 ## Build
 

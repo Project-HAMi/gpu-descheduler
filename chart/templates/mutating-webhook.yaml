@@ -4,6 +4,10 @@ metadata:
   name: {{ include "gpu-descheduler-webhook.fullname" . }}
   labels:
     {{- include "gpu-descheduler-webhook.labels" . | nindent 4 }}
+  {{- if not (include "gpu-descheduler-webhook.manageCerts" .) }}
+  annotations:
+    cert-manager.io/inject-ca-from: {{ include "gpu-descheduler-webhook.namespace" . }}/{{ include "gpu-descheduler-webhook.fullname" . }}-cert
+  {{- end }}
 webhooks:
   - name: defrag.pre.hami.io
     rules:
@@ -27,4 +31,4 @@ webhooks:
         name: {{ include "gpu-descheduler-webhook.fullname" . }}
         path: /mutate
       # Do not specify port, let Kubernetes auto-use the Service default port (443)
-      # caBundle is auto-filled by Post-Install Patch Job (Cert-Gen approach, consistent with HAMI)
+      # caBundle is filled by the descheduler, or by cert-manager when certManager.enabled.

@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"strings"
+	"sync"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -18,6 +21,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -27,9 +31,13 @@ import (
 	"gpu-descheduler/pkg/gpu-descheduler/controller"
 	defragwebhook "gpu-descheduler/pkg/gpu-descheduler/webhook"
 	"gpu-descheduler/pkg/schedulerclient"
+	"gpu-descheduler/pkg/webhookcert"
 )
 
-const defaultTLSDir = "/etc/webhook/certs"
+const (
+	defaultTLSDir               = "/etc/webhook/certs"
+	serviceAccountNamespaceFile = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
+)
 
 var (
 	setupLog = ctrl.Log.WithName("setup")
@@ -68,6 +76,36 @@ func discoverSchedulerURL(namespace, service string, port int) string {
 	return url
 }
 
+// podNamespace returns the namespace the Pod runs in.
+func podNamespace() (string, error) {
+	if ns := os.Getenv("POD_NAMESPACE"); ns != "" {
+		return ns, nil
+	}
+	b, err := os.ReadFile(serviceAccountNamespaceFile)
+	if err != nil {
+		return "", err
+	}
+	if ns := strings.TrimSpace(string(b)); ns != "" {
+		return ns, nil
+	}
+	return "", errors.New("empty namespace in " + serviceAccountNamespaceFile)
+}
+
+// webhookReadyCheck fails until ready is closed, then reports whether the
+// webhook server accepts TLS connections. It asks for the server only then,
+// because asking starts it, and it needs the certificate to start.
+func webhookReadyCheck(ready <-chan struct{}, started func() healthz.Checker) healthz.Checker {
+	check := sync.OnceValue(started)
+	return func(req *http.Request) error {
+		select {
+		case <-ready:
+			return check()(req)
+		default:
+			return errors.New("webhook certificate is not ready yet")
+		}
+	}
+}
+
 func main() {
 	var tlsDir string
 	var port int
@@ -83,10 +121,16 @@ func main() {
 	flag.StringVar(&schedulerService, "scheduler-service", defaultSchedulerService, "Name of the HAMi scheduler Service")
 	flag.DurationVar(&syncInterval, "sync-interval", 1*time.Minute, "Interval for syncing cluster state from scheduler")
 	var enableLeaderElection bool
+	var manageCerts bool
+	var certSecret, webhookService, webhookConfig string
 	flag.StringVar(&tlsDir, "tls-dir", defaultTLSDir, "tls certificate directory")
 	flag.IntVar(&port, "port", 8443, "webhook https listen port")
 	flag.IntVar(&port, "webhook-port", 8443, "Deprecated: use --port.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", true, "enable leader election for HA")
+	flag.BoolVar(&manageCerts, "manage-certs", true, "Issue and renew the webhook certificate into --tls-dir. Disable when cert-manager mounts it there.")
+	flag.StringVar(&certSecret, "cert-secret", "gpu-descheduler-webhook-cert", "Secret in the Pod namespace that stores the managed certificate")
+	flag.StringVar(&webhookService, "webhook-service", "gpu-descheduler-webhook", "Service the managed certificate is issued for")
+	flag.StringVar(&webhookConfig, "webhook-config", "gpu-descheduler-webhook", "MutatingWebhookConfiguration that gets the CA of the managed certificate")
 	klog.InitFlags(nil)
 	flag.Parse()
 
@@ -154,6 +198,24 @@ func main() {
 	}
 
 	k8sClient := kubernetes.NewForConfigOrDie(ctrl.GetConfigOrDie())
+
+	var certsReady <-chan struct{}
+	if manageCerts {
+		namespace, err := podNamespace()
+		if err != nil {
+			log.Fatalf("find the Pod namespace for the webhook certificate: %v", err)
+		}
+		certs := webhookcert.New(k8sClient, namespace, certSecret, webhookService, webhookConfig, tlsDir)
+		if err := mgr.Add(certs); err != nil {
+			log.Fatalf("add webhook certificate manager: %v", err)
+		}
+		certsReady = certs.Ready()
+	} else {
+		ready := make(chan struct{})
+		close(ready)
+		certsReady = ready
+	}
+
 	obsCache := cache.InitGlobalObservationCache(k8sClient)
 
 	statusUpdater := func(namespace, name, phase, message string, matchedPod ...cache.MatchedPodInfo) error {
@@ -229,20 +291,23 @@ func main() {
 		ClusterState: clusterState,
 	}
 
-	// Register Webhook
-	mgr.GetWebhookServer().Register("/mutate", &webhook.Admission{Handler: podMutator})
+	// The webhook server loads its certificate when it starts, so it is
+	// added to the manager only once the certificate is written.
+	go func() {
+		<-certsReady
+		mgr.GetWebhookServer().Register("/mutate", &webhook.Admission{Handler: podMutator})
+	}()
 
 	// Health checks
 	if err := mgr.AddHealthzCheck("health", func(req *http.Request) error { return nil }); err != nil {
 		log.Fatal(err)
 	}
-	if err := mgr.AddReadyzCheck("ready", func(req *http.Request) error { return nil }); err != nil {
+	webhookStarted := func() healthz.Checker { return mgr.GetWebhookServer().StartedChecker() }
+	if err := mgr.AddReadyzCheck("webhook", webhookReadyCheck(certsReady, webhookStarted)); err != nil {
 		log.Fatal(err)
 	}
 
 	klog.Info("starting gpu-descheduler manager: controller + mutate webhook")
-	setupLog.Info("Webhook registered successfully",
-		"path", "/mutate-pod")
 
 	apiMux := http.NewServeMux()
 	RegisterAllAPIHandlers(apiMux, clusterState, placementCache)

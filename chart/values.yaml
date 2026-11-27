@@ -1,5 +1,5 @@
 # GPU Descheduler Webhook Production Config
-# TLS certs auto-generated via kube-webhook-certgen (no cert-manager)
+# The descheduler issues and renews its own webhook certificate (no cert-manager needed)
 
 # ============================================================
 # Namespace
@@ -57,30 +57,24 @@ webhookPort: 8443       # Webhook HTTPS port (must match --port arg)
 probePort: 8081         # Health check port
 
 # ============================================================
-# Cert-Manager Config (disabled, using certgen approach)
+# Pod Scheduling
 # ============================================================
-certManager:
-  enabled: false        # Disable cert-manager
-  issuerName: selfsigned-cluster-issuer
+podAnnotations: {}
+priorityClassName: ""
+nodeSelector: {}
+tolerations: []
 
 # ============================================================
-# Kube-Webhook-Certgen Config (auto-generated TLS)
+# Cert-Manager Config
 # ============================================================
-patch:
-  enabled: true         # Enable certgen auto-generated certs
-  image:
-    registry: "docker.io"
-    repository: "liangjw/kube-webhook-certgen"
-    # The digest is the one of registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.1.1,
-    # which this mirror matches, so a changed tag on the mirror cannot swap the image.
-    tag: "v1.1.1@sha256:64d8c73dca984af206adf9d6d7e46aa550362b1d7a01f3a0a91b20cc67868660"
-    pullPolicy: IfNotPresent
-    pullSecrets: []
-  priorityClassName: ""
-  podAnnotations: {}
-  nodeSelector: {}
-  tolerations: []
-  runAsUser: 2000
+# By default the descheduler keeps a self-signed CA and its serving
+# certificate in the <fullname>-cert Secret, renews them, and injects the CA
+# into the webhook configuration. Enable this to take the certificate from
+# cert-manager instead, issued by the given ClusterIssuer.
+certManager:
+  enabled: false
+  issuerName: selfsigned-cluster-issuer
+  secretName: gpu-descheduler-webhook-tls
 
 # ============================================================
 # Webhook Admission Policy

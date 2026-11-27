@@ -32,14 +32,16 @@ release: {{ .Release.Name }}
 {{- end -}}
 {{- end -}}
 
-{{/* certgen image of the TLS hook Jobs, pinned by digest unless patch.image.tag is set */}}
-{{- define "gpu-descheduler-webhook.certgenImage" -}}
-{{- $image := .Values.patch.image | default dict -}}
-{{- $tag := $image.tag | default "v1.1.1@sha256:64d8c73dca984af206adf9d6d7e46aa550362b1d7a01f3a0a91b20cc67868660" -}}
-{{ $image.registry | default "docker.io" }}/{{ $image.repository | default "liangjw/kube-webhook-certgen" }}:{{ $tag }}
+{{/* Secret that holds the webhook certificate */}}
+{{- define "gpu-descheduler-webhook.certSecret" -}}
+{{- if and .Values.certManager .Values.certManager.enabled -}}
+{{ .Values.certManager.secretName | default "gpu-descheduler-webhook-tls" }}
+{{- else -}}
+{{ include "gpu-descheduler-webhook.fullname" . }}-cert
+{{- end -}}
 {{- end -}}
 
-{{/* Service account of the TLS hook Jobs */}}
-{{- define "gpu-descheduler-webhook.admissionServiceAccount" -}}
-{{ include "gpu-descheduler-webhook.fullname" . }}-admission
+{{/* true when the descheduler issues its own certificate */}}
+{{- define "gpu-descheduler-webhook.manageCerts" -}}
+{{- if not (and .Values.certManager .Values.certManager.enabled) }}true{{ end -}}
 {{- end -}}

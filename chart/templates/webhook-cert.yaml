@@ -1,0 +1,42 @@
+{{- if include "gpu-descheduler-webhook.manageCerts" . }}
+# The descheduler fills this Secret with its CA and serving certificate and
+# renews them. The chart only creates it, so the descheduler needs no right
+# to create Secrets.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "gpu-descheduler-webhook.certSecret" . }}
+  namespace: {{ include "gpu-descheduler-webhook.namespace" . }}
+  labels:
+    {{- include "gpu-descheduler-webhook.labels" . | nindent 4 }}
+type: Opaque
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "gpu-descheduler-webhook.fullname" . }}-cert
+  namespace: {{ include "gpu-descheduler-webhook.namespace" . }}
+  labels:
+    {{- include "gpu-descheduler-webhook.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: [{{ include "gpu-descheduler-webhook.certSecret" . | quote }}]
+    verbs: ["get", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "gpu-descheduler-webhook.fullname" . }}-cert
+  namespace: {{ include "gpu-descheduler-webhook.namespace" . }}
+  labels:
+    {{- include "gpu-descheduler-webhook.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "gpu-descheduler-webhook.fullname" . }}-cert
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "gpu-descheduler-webhook.fullname" . }}
+    namespace: {{ include "gpu-descheduler-webhook.namespace" . }}
+{{- end }}
