@@ -26,15 +26,12 @@ else
     echo "   Helm Release not found (skipped)"
 fi
 
-# Step 2: Delete TLS Secret
+# Step 2: Delete the TLS Secrets: -cert is the descheduler's own, -tls the
+# one of cert-manager or of the certgen Jobs in 0.0.3 and earlier.
 echo ""
-echo "Step 2: Deleting TLS Secret..."
-if kubectl get secret gpu-descheduler-webhook-tls -n "$NAMESPACE" >/dev/null 2>&1; then
-    kubectl delete secret gpu-descheduler-webhook-tls -n "$NAMESPACE"
-    echo "   TLS Secret deleted"
-else
-    echo "   TLS Secret not found (skipped)"
-fi
+echo "Step 2: Deleting TLS Secrets..."
+kubectl delete secret -n "$NAMESPACE" --ignore-not-found \
+    gpu-descheduler-webhook-cert gpu-descheduler-webhook-tls
 
 # Step 3: Delete CRD
 echo ""

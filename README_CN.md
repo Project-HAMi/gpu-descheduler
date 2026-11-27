@@ -47,6 +47,8 @@ helm install gpu-descheduler ./chart --namespace kube-system --create-namespace
 
 所有资源都装在 `--namespace` 指定的命名空间里。chart 只运行一个副本，设置更多会报错，因为 webhook 从 leader 的内存里匹配 placement。
 
+webhook 不需要 cert-manager。descheduler 自己生成 CA 和 Service 的证书，存在 `gpu-descheduler-webhook-cert` Secret 里，把 CA 写进它的 MutatingWebhookConfiguration，并在证书过期前 90 天续期。如果要改用 cert-manager 签发的证书，设置 `certManager.enabled=true`，并把 `certManager.issuerName` 设为一个 ClusterIssuer。
+
 检查是否运行：
 
 ```bash
@@ -60,6 +62,8 @@ NAMESPACE=kube-system ./chart/uninstall-gpu-descheduler.sh
 ```
 
 0.0.2 把状态存在它所在节点的 `/etc/crdplacement` 里。之后的版本把状态记在 placement 的 status 里，升级后可以删掉这个目录。
+
+0.0.3 及之前的版本用运行 kube-webhook-certgen 的 Job 把证书写到 `gpu-descheduler-webhook-tls` Secret。之后的版本不再使用它，升级后可以删掉。如果要退回 0.0.3，请用 `helm upgrade` 加 `--version 0.0.3-chart`，不要用 `helm rollback`：rollback 不会运行把旧 CA 写回 webhook 配置的 Job。
 
 ## 构建
 

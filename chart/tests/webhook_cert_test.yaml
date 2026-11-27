@@ -1,0 +1,176 @@
+suite: Webhook certificate
+templates:
+  - deployment.yaml
+  - mutating-webhook.yaml
+  - webhook-cert.yaml
+  - tls-cert.yaml
+  - rbac/clusterrole.yaml
+release:
+  namespace: gpu
+tests:
+  - it: creates the empty Secret the descheduler fills
+    template: webhook-cert.yaml
+    documentSelector:
+      path: kind
+      value: Secret
+    asserts:
+      - equal:
+          path: metadata.name
+          value: gpu-descheduler-webhook-cert
+      - equal:
+          path: metadata.namespace
+          value: gpu
+      - equal:
+          path: type
+          value: Opaque
+      - notExists:
+          path: data
+
+  - it: lets the descheduler read and renew only its own Secret
+    template: webhook-cert.yaml
+    documentSelector:
+      path: kind
+      value: Role
+    asserts:
+      - equal:
+          path: rules
+          value:
+            - apiGroups: [""]
+              resources: ["secrets"]
+              resourceNames: ["gpu-descheduler-webhook-cert"]
+              verbs: ["get", "update"]
+
+  - it: binds the Secret access to the descheduler service account
+    template: webhook-cert.yaml
+    documentSelector:
+      path: kind
+      value: RoleBinding
+    asserts:
+      - equal:
+          path: subjects[0].name
+          value: gpu-descheduler-webhook
+      - equal:
+          path: subjects[0].namespace
+          value: gpu
+
+  - it: lets the descheduler update only its own webhook configuration
+    template: rbac/clusterrole.yaml
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups: ["admissionregistration.k8s.io"]
+            resources: ["mutatingwebhookconfigurations"]
+            resourceNames: ["gpu-descheduler-webhook"]
+            verbs: ["get", "update"]
+
+  - it: points the descheduler at the Secret, Service and webhook configuration
+    template: deployment.yaml
+    set:
+      fullnameOverride: desched
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --cert-secret=desched-cert
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --webhook-service=desched
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --webhook-config=desched
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+
+  - it: keeps the written key in memory
+    template: deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.volumes
+          value:
+            - name: tls
+              emptyDir:
+                medium: Memory
+                sizeLimit: 1Mi
+      - notExists:
+          path: spec.template.spec.containers[0].volumeMounts[0].readOnly
+
+  - it: leaves the caBundle to the descheduler
+    template: mutating-webhook.yaml
+    asserts:
+      - notExists:
+          path: metadata.annotations
+      - notExists:
+          path: webhooks[0].clientConfig.caBundle
+
+  - it: takes the certificate from cert-manager when enabled
+    set:
+      certManager.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: webhook-cert.yaml
+      - hasDocuments:
+          count: 1
+        template: tls-cert.yaml
+      - notContains:
+          path: rules
+          content:
+            apiGroups: ["admissionregistration.k8s.io"]
+            resources: ["mutatingwebhookconfigurations"]
+            resourceNames: ["gpu-descheduler-webhook"]
+            verbs: ["get", "update"]
+        template: rbac/clusterrole.yaml
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --manage-certs=false
+        template: deployment.yaml
+      - equal:
+          path: spec.template.spec.volumes[0].secret.secretName
+          value: gpu-descheduler-webhook-tls
+        template: deployment.yaml
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[0].readOnly
+          value: true
+        template: deployment.yaml
+      - equal:
+          path: metadata.annotations["cert-manager.io/inject-ca-from"]
+          value: gpu/gpu-descheduler-webhook-cert
+        template: mutating-webhook.yaml
+
+  - it: still reads Pod settings from patch, where 0.0.3 kept them
+    template: deployment.yaml
+    set:
+      patch:
+        podAnnotations: {a: b}
+        priorityClassName: high
+        nodeSelector: {gpu: "true"}
+        tolerations: [{key: gpu, operator: Exists}]
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations
+          value: {a: b}
+      - equal:
+          path: spec.template.spec.priorityClassName
+          value: high
+      - equal:
+          path: spec.template.spec.nodeSelector
+          value: {gpu: "true"}
+      - equal:
+          path: spec.template.spec.tolerations
+          value: [{key: gpu, operator: Exists}]
+
+  - it: prefers the top-level Pod settings
+    template: deployment.yaml
+    set:
+      nodeSelector: {new: "true"}
+      patch:
+        nodeSelector: {old: "true"}
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector
+          value: {new: "true"}

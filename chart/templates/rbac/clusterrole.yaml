@@ -35,3 +35,10 @@ rules:
 - apiGroups: [""]
   resources: ["events"]
   verbs: ["create","patch"]
+{{- if include "gpu-descheduler-webhook.manageCerts" . }}
+# caBundle of the webhook's own configuration
+- apiGroups: ["admissionregistration.k8s.io"]
+  resources: ["mutatingwebhookconfigurations"]
+  resourceNames: [{{ include "gpu-descheduler-webhook.fullname" . | quote }}]
+  verbs: ["get","update"]
+{{- end }}

@@ -5,6 +5,12 @@ metadata:
   namespace: {{ include "gpu-descheduler-webhook.namespace" . }}
   labels:
     {{- include "gpu-descheduler-webhook.labels" . | nindent 4 }}
+{{- /* patch.* held the Pod settings while certgen Jobs shared them; still read for upgrades */ -}}
+{{- $patch := .Values.patch | default dict }}
+{{- $podAnnotations := .Values.podAnnotations | default $patch.podAnnotations }}
+{{- $priorityClassName := .Values.priorityClassName | default $patch.priorityClassName }}
+{{- $nodeSelector := .Values.nodeSelector | default $patch.nodeSelector }}
+{{- $tolerations := .Values.tolerations | default $patch.tolerations }}
 spec:
   {{- if gt (int (.Values.replicaCount | default 1)) 1 }}
   {{- fail "replicaCount must be 1: placements are matched in the leader's memory, so a second replica would admit Pods without them" }}
@@ -17,10 +23,10 @@ spec:
     metadata:
       labels:
         {{- include "gpu-descheduler-webhook.selectorLabels" . | nindent 8 }}
+      {{- with $podAnnotations }}
       annotations:
-        {{- with .Values.patch }}
-        {{- toYaml .podAnnotations | default "{}" | nindent 8 }}
-        {{- end }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
     spec:
       serviceAccountName: {{ include "gpu-descheduler-webhook.fullname" . }}
       securityContext:
@@ -48,12 +54,26 @@ spec:
             - --port=8443
             - --enable-leader-election=true
           {{- end }}
+          {{- if include "gpu-descheduler-webhook.manageCerts" . }}
+            - --cert-secret={{ include "gpu-descheduler-webhook.certSecret" . }}
+            - --webhook-service={{ include "gpu-descheduler-webhook.fullname" . }}
+            - --webhook-config={{ include "gpu-descheduler-webhook.fullname" . }}
+          {{- else }}
+            - --manage-certs=false
+          {{- end }}
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
           ports:
             - containerPort: {{ .Values.webhookPort | default 8443 }}
           volumeMounts:
             - name: tls
               mountPath: /etc/webhook/certs
+              {{- if not (include "gpu-descheduler-webhook.manageCerts" .) }}
               readOnly: true
+              {{- end }}
           livenessProbe:
             httpGet:
               path: /healthz
@@ -77,26 +97,25 @@ spec:
               cpu: 500m
               memory: 512Mi
             {{- end }}
-      {{- if and .Values.patch .Values.patch.priorityClassName }}
-      priorityClassName: {{ .Values.patch.priorityClassName }}
+      {{- with $priorityClassName }}
+      priorityClassName: {{ . }}
       {{- end }}
-      {{- with .Values.patch }}
-      {{- with .nodeSelector }}
+      {{- with $nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- end }}
-      {{- with .Values.patch }}
-      {{- with .tolerations }}
+      {{- with $tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- end }}
       volumes:
         - name: tls
+          {{- if include "gpu-descheduler-webhook.manageCerts" . }}
+          # The descheduler writes the certificate from its Secret here.
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
+          {{- else }}
           secret:
-            {{- if and .Values.certManager .Values.certManager.enabled }}
-            secretName: gpu-descheduler-webhook-tls
-            {{- else }}
-            secretName: gpu-descheduler-webhook-tls
-            {{- end }}
+            secretName: {{ include "gpu-descheduler-webhook.certSecret" . }}
+          {{- end }}
